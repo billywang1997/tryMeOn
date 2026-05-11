@@ -1,0 +1,26 @@
+# Copy this file to local.properties and fill in your own keys.
+# local.properties is gitignored — do not commit real credentials.
+
+sdk.dir=/path/to/Android/sdk
+
+# Claude API (https://console.anthropic.com)
+CLAUDE_API_KEY=
+
+# FASHN / Replicate API
+FASHN_API_KEY=
+
+# Unsplash (https://unsplash.com/developers)
+UNSPLASH_ACCESS_KEY=
+
+# Google Programmable Search (optional — leave blank to disable)
+GOOGLE_SEARCH_KEY=
+GOOGLE_SEARCH_CX=
+
+# eBay Browse API (https://developer.ebay.com)
+EBAY_CLIENT_ID=
+EBAY_CLIENT_SECRET=
+# eBay Partner Network campaign ID (optional)
+EBAY_AFFILIATE_CAMPAIGN_ID=
+
+# RapidAPI — shared across real-time-product-search, real-time-amazon-data, vinted3
+RAPID_API_KEY=

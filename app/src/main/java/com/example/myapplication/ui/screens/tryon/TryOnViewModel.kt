@@ -1,0 +1,665 @@
+package com.example.myapplication.ui.screens.tryon
+
+import android.content.Context
+import android.net.Uri
+import android.util.Log
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.myapplication.data.BasicWardrobeProvider
+import com.example.myapplication.data.remote.AmazonRealTimeApiService
+import com.example.myapplication.data.remote.ClaudeApiService
+import com.example.myapplication.data.remote.EbayApiService
+import com.example.myapplication.data.remote.EbayItem
+import com.example.myapplication.data.remote.RealTimeProductSearchService
+import com.example.myapplication.data.remote.ReplicateApiService
+import com.example.myapplication.data.remote.VintedApiService
+import com.example.myapplication.data.remote.UnsplashService
+import com.example.myapplication.data.repository.UserProfileRepository
+import com.example.myapplication.data.repository.WardrobeRepository
+import com.example.myapplication.domain.model.ClothingCategory
+import com.example.myapplication.domain.model.ClothingItem
+import com.example.myapplication.domain.model.SavedImage
+import com.example.myapplication.domain.model.UserProfile
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
+
+private fun normalizeGender(raw: String): String = when (raw.trim().lowercase()) {
+    "male", "男", "m" -> "Male"
+    "female", "女", "f" -> "Female"
+    else -> raw
+}
+
+enum class GarmentTab { WARDROBE, ESSENTIALS, EBAY }
+
+data class EbayTryOnCategory(
+    val name: String,
+    val reason: String,
+    val fashnCategory: String,
+    val searchQuery: String,
+    val items: List<EbayItem> = emptyList(),
+    val loading: Boolean = false,
+    val error: String = ""
+)
+
+data class EssentialsCategoryState(
+    val category: ClothingCategory,
+    val items: List<ClothingItem>,
+    val label: String = ""
+)
+
+// Unified cross-tab selection entry — one per garment slot (category)
+data class SelectedGarment(
+    val slotKey: String,         // ClothingCategory.name
+    val source: GarmentTab,
+    val clothingItem: ClothingItem? = null,
+    val ebayItem: EbayItem? = null,
+    val ebayCategory: String = ""
+) {
+    val displayLabel: String get() = when {
+        clothingItem != null -> clothingItem.name.ifEmpty { clothingItem.category.label }
+        ebayItem != null -> ebayItem.title.take(24)
+        else -> ""
+    }
+}
+
+data class TryOnUiState(
+    val wardrobe: List<ClothingItem> = emptyList(),
+    val profile: UserProfile? = null,
+    val garmentTab: GarmentTab = GarmentTab.WARDROBE,
+    // Unified cross-tab selection: slotKey (ClothingCategory.name) → SelectedGarment
+    val selectedGarments: Map<String, SelectedGarment> = emptyMap(),
+    // eBay tab
+    val ebayCategories: List<EbayTryOnCategory> = emptyList(),
+    val ebayRecoLoading: Boolean = false,
+    val ebayRecoError: String = "",
+    // Essentials tab
+    val essentialsCategories: List<EssentialsCategoryState> = emptyList(),
+    // Shop Similar (triggered by tapping essentials item)
+    val shopSimilarItem: ClothingItem? = null,
+    val shopSimilarResults: List<EbayItem> = emptyList(),
+    val shopSimilarLoading: Boolean = false,
+    val shopSimilarError: String = "",
+    // Common
+    val userPhotoPath: String = "",
+    val resultViews: List<String> = emptyList(),
+    val generatingViews: Boolean = false,
+    val analysis: String = "",
+    val isLoading: Boolean = false,
+    val loadingStep: String = "",
+    val error: String = "",
+    val imageSaved: Boolean = false,
+    val inferredGender: String = "",
+    val inferringGender: Boolean = false,
+    val favoriteEssentialIds: Set<Long> = emptySet(),
+    val favoriteEbayIds: Set<String> = emptySet()
+) {
+    // "Other" is treated as unset — inferred gender from wardrobe/photo takes precedence
+    val effectiveGender: String get() {
+        val pg = normalizeGender(profile?.gender ?: "")
+        return if (pg == "Male" || pg == "Female") pg
+        else normalizeGender(inferredGender)
+    }
+    val resultImageUrl: String get() = resultViews.firstOrNull() ?: ""
+    val selectedClothingIds: Set<Long> get() = selectedGarments.values.mapNotNull { it.clothingItem?.id }.toSet()
+    val selectedEbayIds: Set<String> get() = selectedGarments.values.mapNotNull { it.ebayItem?.itemId }.toSet()
+}
+
+class TryOnViewModel(
+    private val wardrobeRepository: WardrobeRepository,
+    private val profileRepository: UserProfileRepository,
+    private val claudeService: ClaudeApiService,
+    private val replicateService: ReplicateApiService,
+    private val openAiKey: String,
+    private val replicateKey: String,
+    private val ebayService: EbayApiService? = null,
+    private val ebayClientId: String = "",
+    private val ebayClientSecret: String = "",
+    private val amazonService: AmazonRealTimeApiService? = null,
+    private val rapidApiKey: String = "",
+    private val vintedService: VintedApiService? = null,
+    private val rtpsService: RealTimeProductSearchService? = null,
+    private val ebayAffiliateCampaignId: String = "",
+    private val amazonAssociateTag: String = "",
+    private val styleKeywords: Set<String> = emptySet()
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(TryOnUiState())
+    val uiState: StateFlow<TryOnUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            wardrobeRepository.getAllClothing().collect { clothes ->
+                _uiState.value = _uiState.value.copy(wardrobe = clothes)
+                if (clothes.isNotEmpty() && needsGenderInference()) {
+                    // Apply instant local heuristic synchronously first
+                    val localGender = inferGenderLocally(clothes)
+                    if (localGender.isNotEmpty() && _uiState.value.inferredGender.isEmpty()) {
+                        _uiState.value = _uiState.value.copy(inferredGender = localGender)
+                        if (_uiState.value.garmentTab == GarmentTab.EBAY) loadEbayRecommendations()
+                    }
+                    // Then kick off API inference for higher accuracy
+                    inferGenderFromWardrobeItems(clothes)
+                }
+            }
+        }
+        viewModelScope.launch {
+            profileRepository.getProfile().collect { profile ->
+                val prevGender = _uiState.value.effectiveGender
+                _uiState.value = _uiState.value.copy(profile = profile)
+                val newGender = _uiState.value.effectiveGender
+                if (newGender != prevGender && newGender.isNotEmpty()) loadEssentials(newGender)
+                // Infer gender from existing profile photo if gender not set
+                val photo = profile?.bodyImagePath?.takeIf { it.isNotEmpty() }
+                    ?: profile?.faceImagePath?.takeIf { it.isNotEmpty() }
+                if (photo != null && needsGenderInference()) {
+                    inferGenderFromPhoto(photo)
+                }
+            }
+        }
+        loadEssentials()
+    }
+
+    private fun loadEssentials(gender: String = _uiState.value.effectiveGender) {
+        val g = gender.ifBlank { "Female" }
+        val result = mutableListOf<EssentialsCategoryState>()
+        result.add(EssentialsCategoryState(ClothingCategory.INNER, BasicWardrobeProvider.innerTops(g), "Tops"))
+        val shirts = BasicWardrobeProvider.innerShirts(g)
+        if (shirts.isNotEmpty()) result.add(EssentialsCategoryState(ClothingCategory.INNER, shirts, "Shirts"))
+        for (cat in listOf(ClothingCategory.OUTERWEAR, ClothingCategory.PANTS, ClothingCategory.DRESS, ClothingCategory.SHOES, ClothingCategory.BAG)) {
+            result.add(EssentialsCategoryState(cat, BasicWardrobeProvider.byGenderAndCategory(g, cat)))
+        }
+        _uiState.value = _uiState.value.copy(essentialsCategories = result)
+    }
+
+    // ── Tab ──────────────────────────────────────────────────────────────
+
+    fun setGarmentTab(tab: GarmentTab) {
+        _uiState.value = _uiState.value.copy(garmentTab = tab, resultViews = emptyList(), analysis = "", error = "")
+        if (tab == GarmentTab.EBAY && _uiState.value.ebayCategories.isEmpty()) {
+            loadEbayRecommendations()
+        }
+    }
+
+    // ── Unified cross-tab selection ───────────────────────────────────────
+
+    fun toggleClothingItem(item: ClothingItem, source: GarmentTab) {
+        val slot = item.category.name
+        val current = _uiState.value.selectedGarments.toMutableMap()
+        val existing = current[slot]
+        if (existing?.clothingItem?.id == item.id && existing.source == source) {
+            current.remove(slot)
+        } else {
+            current[slot] = SelectedGarment(slot, source, clothingItem = item)
+        }
+        _uiState.value = _uiState.value.copy(selectedGarments = current, resultViews = emptyList(), error = "")
+    }
+
+    // Keep old name for Wardrobe tab backward compat
+    fun toggleItem(item: ClothingItem) = toggleClothingItem(item, GarmentTab.WARDROBE)
+
+    fun toggleEbayItem(item: EbayItem, categoryName: String) {
+        val slot = ebayNameToSlot(categoryName)
+        val current = _uiState.value.selectedGarments.toMutableMap()
+        if (current[slot]?.ebayItem?.itemId == item.itemId) {
+            current.remove(slot)
+        } else {
+            current[slot] = SelectedGarment(slot, GarmentTab.EBAY, ebayItem = item, ebayCategory = categoryName)
+        }
+        _uiState.value = _uiState.value.copy(selectedGarments = current, resultViews = emptyList(), error = "")
+    }
+
+    // ── Essentials ────────────────────────────────────────────────────────
+
+    fun refreshEssentialsCategory(category: ClothingCategory) {
+        val gender = _uiState.value.effectiveGender
+        val cats = _uiState.value.essentialsCategories.toMutableList()
+        if (category == ClothingCategory.INNER) {
+            for (i in cats.indices) {
+                if (cats[i].category == ClothingCategory.INNER) {
+                    val pool = if (cats[i].label == "Shirts") BasicWardrobeProvider.innerShirts(gender)
+                               else BasicWardrobeProvider.innerTops(gender)
+                    cats[i] = cats[i].copy(items = pool.shuffled())
+                }
+            }
+        } else {
+            val idx = cats.indexOfFirst { it.category == category }
+            if (idx >= 0) {
+                val pool = BasicWardrobeProvider.byGenderAndCategory(gender, category)
+                cats[idx] = cats[idx].copy(items = pool.shuffled())
+            }
+        }
+        _uiState.value = _uiState.value.copy(essentialsCategories = cats)
+    }
+
+    // ── Shop Similar ──────────────────────────────────────────────────────
+
+    fun shopForSimilar(item: ClothingItem) {
+        _uiState.value = _uiState.value.copy(
+            shopSimilarItem = item, shopSimilarLoading = true,
+            shopSimilarResults = emptyList(), shopSimilarError = ""
+        )
+        viewModelScope.launch {
+            val rawQuery = listOf(item.color, item.name.ifEmpty { item.category.label }).filter { it.isNotBlank() }.joinToString(" ")
+            val query = ensureGenderInQuery(rawQuery)
+            Log.d("TryOnVM", "shopSimilar: rawQuery='$rawQuery' → finalQuery='$query' effectiveGender=${_uiState.value.effectiveGender} profileGender=${_uiState.value.profile?.gender}")
+            // Fixed quota: RTPS(20) → eBay(6) → Amazon(6) → Vinted(6)
+            val rtpsDeferred   = async { rtpsService?.search(rapidApiKey, query, limit = 20) }
+            val ebayDeferred   = async { ebayService?.search(ebayClientId, ebayClientSecret, query, limit = 6) }
+            val amazonDeferred = async { amazonService?.search(rapidApiKey, query, limit = 6) }
+            val vintedDeferred = async { vintedService?.search(rapidApiKey, query) }
+            val combined = filterByGender(
+                (rtpsDeferred.await() ?: emptyList()).take(20) +
+                (ebayDeferred.await()?.getOrNull() ?: emptyList()).take(6)
+                    .map { applyEbayAffiliate(it) } +
+                (amazonDeferred.await()?.getOrNull() ?: emptyList()).take(6)
+                    .map { applyAmazonAffiliate(it) } +
+                (vintedDeferred.await()?.getOrNull()?.map { it.toEbayItem() } ?: emptyList()).take(6)
+            )
+            _uiState.value = _uiState.value.copy(
+                shopSimilarLoading = false,
+                shopSimilarResults = combined,
+                shopSimilarError = if (combined.isEmpty()) "No results found" else ""
+            )
+        }
+    }
+
+    fun closeShopSimilar() {
+        _uiState.value = _uiState.value.copy(
+            shopSimilarItem = null, shopSimilarResults = emptyList(),
+            shopSimilarError = "", shopSimilarLoading = false
+        )
+    }
+
+    // ── eBay recommendations ─────────────────────────────────────────────
+
+    fun refreshEbayRecommendations() = loadEbayRecommendations()
+
+    fun refreshEbayCategory(index: Int) {
+        val cat = _uiState.value.ebayCategories.getOrNull(index) ?: return
+        viewModelScope.launch { fetchEbayCategoryItems(index, cat.searchQuery) }
+    }
+
+    private fun loadEbayRecommendations() {
+        if (openAiKey.isBlank()) return
+        // Sync local heuristic before any API call — so gender is always populated
+        if (_uiState.value.effectiveGender.isEmpty()) {
+            val localGender = inferGenderLocally(_uiState.value.wardrobe)
+            if (localGender.isNotEmpty()) {
+                _uiState.value = _uiState.value.copy(inferredGender = localGender)
+            }
+        }
+        val genderForLog = _uiState.value.effectiveGender
+        val profileGenderForLog = _uiState.value.profile?.gender ?: "null"
+        Log.d("TryOnVM", "loadReco: profileGender=$profileGenderForLog inferredGender=${_uiState.value.inferredGender} effectiveGender=$genderForLog styleKeywords=$styleKeywords")
+        _uiState.value = _uiState.value.copy(ebayRecoLoading = true, ebayRecoError = "", ebayCategories = emptyList())
+        viewModelScope.launch {
+            val clothes = wardrobeRepository.getAllClothing().first().takeIf { it.isNotEmpty() }
+                ?: BasicWardrobeProvider.items
+            val raw = try { claudeService.getTryOnEbayRecommendations(openAiKey, clothes, _uiState.value.effectiveGender, styleKeywords) }
+            catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(ebayRecoLoading = false, ebayRecoError = "Failed to load recommendations: ${e.message}")
+                return@launch
+            }
+            val cats = parseEbayCategories(raw)
+            if (cats.isEmpty()) {
+                _uiState.value = _uiState.value.copy(ebayRecoLoading = false, ebayRecoError = "No recommendations yet — add items to your wardrobe first")
+                return@launch
+            }
+            _uiState.value = _uiState.value.copy(ebayRecoLoading = false, ebayCategories = cats)
+            cats.forEachIndexed { i, cat -> launch { fetchEbayCategoryItems(i, cat.searchQuery) } }
+        }
+    }
+
+    private suspend fun fetchEbayCategoryItems(index: Int, rawQuery: String) {
+        updateEbayCategory(index) { it.copy(loading = true) }
+        val query = ensureGenderInQuery(rawQuery)
+        Log.d("TryOnVM", "fetchCategory[$index]: rawQuery='$rawQuery' → finalQuery='$query' effectiveGender=${_uiState.value.effectiveGender}")
+        // Fixed quota: RTPS(20) → eBay(6) → Amazon(6) → Vinted(6)
+        val rtpsDeferred   = viewModelScope.async { rtpsService?.search(rapidApiKey, query, limit = 20) }
+        val ebayDeferred   = viewModelScope.async { ebayService?.search(ebayClientId, ebayClientSecret, query, limit = 6) }
+        val amazonDeferred = viewModelScope.async { amazonService?.search(rapidApiKey, query, limit = 6) }
+        val vintedDeferred = viewModelScope.async { vintedService?.search(rapidApiKey, query) }
+        val combined = filterByGender(
+            (rtpsDeferred.await() ?: emptyList()).take(20) +
+            (ebayDeferred.await()?.getOrNull() ?: emptyList()).take(6)
+                .map { applyEbayAffiliate(it) } +
+            (amazonDeferred.await()?.getOrNull() ?: emptyList()).take(6)
+                .map { applyAmazonAffiliate(it) } +
+            (vintedDeferred.await()?.getOrNull()?.map { it.toEbayItem() } ?: emptyList()).take(6)
+        )
+        updateEbayCategory(index) { it.copy(loading = false, items = combined) }
+    }
+
+    private fun updateEbayCategory(index: Int, block: (EbayTryOnCategory) -> EbayTryOnCategory) {
+        val list = _uiState.value.ebayCategories.toMutableList()
+        if (index < list.size) list[index] = block(list[index])
+        _uiState.value = _uiState.value.copy(ebayCategories = list)
+    }
+
+    // ── Photo ────────────────────────────────────────────────────────────
+
+    fun setUserPhoto(context: Context, uri: Uri) {
+        viewModelScope.launch {
+            val path = savePhoto(context, uri) ?: return@launch
+            _uiState.value = _uiState.value.copy(userPhotoPath = path, error = "")
+            if (needsGenderInference()) {
+                inferGenderFromPhoto(path)
+            }
+        }
+    }
+
+    /** Hard override: user taps a gender chip in the UI. Clears and reloads recommendations. */
+    fun overrideGender(gender: String) {
+        _uiState.value = _uiState.value.copy(
+            inferredGender = gender,
+            ebayCategories = emptyList(),
+            ebayRecoError = ""
+        )
+        if (_uiState.value.garmentTab == GarmentTab.EBAY) loadEbayRecommendations()
+    }
+
+    /**
+     * Remove items whose title clearly belongs to the opposite gender.
+     * Google Shopping and eBay don't filter by gender even with gender keywords in the query.
+     */
+    private fun filterByGender(items: List<EbayItem>): List<EbayItem> {
+        val gender = _uiState.value.effectiveGender
+        if (gender.isEmpty() || gender == "Other") return items
+        return items.filter { item ->
+            val t = item.title.lowercase()
+            when (gender) {
+                "Male" -> !t.contains("women") && !t.contains("woman") &&
+                          !t.contains("ladies") && !t.contains("girl") &&
+                          !t.contains("female") && !t.contains("femme")
+                "Female" -> !t.contains(" men ") && !t.contains("men's") &&
+                            !t.contains("mens ") && !t.contains("boys ") &&
+                            !t.contains(" male ") && !t.contains("masculin")
+                else -> true
+            }
+        }
+    }
+
+    /** Instant, no-API gender guess from wardrobe content. Returns "" if inconclusive. */
+    private fun inferGenderLocally(clothes: List<ClothingItem>): String {
+        if (clothes.isEmpty()) return ""
+        val text = clothes.joinToString(" ") { "${it.name} ${it.notes ?: ""}".lowercase() }
+        val hasDress = clothes.any { it.category == ClothingCategory.DRESS }
+        val femaleHits = listOf(
+            "dress", "skirt", "blouse", "bra", "bikini", "sundress", "midi", "maxi",
+            "lingerie", "romper", "camisole", "cami", "floral", "lace", "heel", "pump", "culottes"
+        ).count { text.contains(it) } + if (hasDress) 3 else 0
+        val maleHits = listOf(
+            "suit", "tie", "chino", "blazer", "tuxedo", "waistcoat", "boxer",
+            "polo shirt", "oxford shirt", "loafer", "derby"
+        ).count { text.contains(it) }
+        return when {
+            femaleHits >= 2 && femaleHits > maleHits -> "Female"
+            maleHits >= 1 && maleHits > femaleHits   -> "Male"
+            else -> ""
+        }
+    }
+
+    private fun needsGenderInference(): Boolean {
+        val state = _uiState.value
+        val profileGender = state.profile?.gender ?: ""
+        // Inference not needed if profile has a real gender choice, or if already inferred/inferring
+        return (profileGender.isEmpty() || profileGender == "Other") &&
+               state.inferredGender.isEmpty() && !state.inferringGender
+    }
+
+    private fun inferGenderFromWardrobeItems(clothes: List<ClothingItem>) {
+        if (openAiKey.isBlank()) return
+        _uiState.value = _uiState.value.copy(inferringGender = true)
+        viewModelScope.launch {
+            val gender = try { claudeService.inferGenderFromWardrobe(openAiKey, clothes) } catch (e: Exception) { "" }
+            if (gender.isNotEmpty()) {
+                _uiState.value = _uiState.value.copy(inferredGender = gender, inferringGender = false)
+                // Use effectiveGender so profile gender always takes priority over inferred
+                loadEssentials(_uiState.value.effectiveGender)
+                if (_uiState.value.garmentTab == GarmentTab.EBAY) loadEbayRecommendations()
+            } else {
+                _uiState.value = _uiState.value.copy(inferringGender = false)
+            }
+        }
+    }
+
+    private fun inferGenderFromPhoto(imagePath: String) {
+        if (openAiKey.isBlank()) return
+        _uiState.value = _uiState.value.copy(inferringGender = true)
+        viewModelScope.launch {
+            val gender = try { claudeService.inferGenderFromPhoto(openAiKey, imagePath) } catch (e: Exception) { "" }
+            if (gender.isNotEmpty()) {
+                _uiState.value = _uiState.value.copy(inferredGender = gender, inferringGender = false)
+                // Use effectiveGender so profile gender always takes priority over inferred
+                loadEssentials(_uiState.value.effectiveGender)
+                if (_uiState.value.garmentTab == GarmentTab.EBAY) loadEbayRecommendations()
+            } else {
+                _uiState.value = _uiState.value.copy(inferringGender = false)
+            }
+        }
+    }
+
+    // ── Try-on ────────────────────────────────────────────────────────────
+
+    fun startTryOn() {
+        val state = _uiState.value
+        val userImagePath = state.userPhotoPath.takeIf { it.isNotEmpty() }
+            ?: state.profile?.bodyImagePath?.takeIf { it.isNotEmpty() }
+            ?: state.profile?.faceImagePath?.takeIf { it.isNotEmpty() }
+        if (userImagePath == null) { _uiState.value = state.copy(error = "Please upload a photo first"); return }
+        if (state.selectedGarments.isEmpty()) { _uiState.value = state.copy(error = "Please select at least one garment"); return }
+        launchUnifiedTryOn(state, userImagePath)
+    }
+
+    private fun launchUnifiedTryOn(state: TryOnUiState, userImagePath: String) {
+        _uiState.value = state.copy(
+            isLoading = true, error = "", resultViews = emptyList(),
+            generatingViews = false, analysis = "", loadingStep = "Preparing garments…"
+        )
+        val bodyRef = state.profile?.bodyImagePath?.takeIf { it.isNotEmpty() && it != userImagePath }
+
+        viewModelScope.launch {
+            val garments = state.selectedGarments.values.mapNotNull { garment ->
+                when {
+                    garment.clothingItem != null -> {
+                        val path = resolveImagePath(garment.clothingItem.imagePath)
+                        if (path.isBlank()) null
+                        else {
+                            val label = listOf(garment.clothingItem.color, garment.clothingItem.category.label, garment.clothingItem.name)
+                                .filter { it.isNotBlank() }.joinToString(" ")
+                            Pair(path, label)
+                        }
+                    }
+                    garment.ebayItem != null -> {
+                        val url = garment.ebayItem.imageUrl.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                        Pair(url, garment.ebayItem.title.take(40))
+                    }
+                    else -> null
+                }
+            }
+
+            if (garments.isEmpty()) {
+                _uiState.value = _uiState.value.copy(isLoading = false, loadingStep = "", error = "No valid garment images found")
+                return@launch
+            }
+
+            _uiState.value = _uiState.value.copy(loadingStep = "Generating front view…")
+            val front = claudeService.generateTryOnImage(openAiKey, userImagePath, garments, state.profile, "front", bodyRef)
+            if (front.isFailure) {
+                _uiState.value = _uiState.value.copy(isLoading = false, loadingStep = "", error = front.exceptionOrNull()?.message ?: "Generation failed")
+                return@launch
+            }
+            _uiState.value = _uiState.value.copy(
+                resultViews = listOf(front.getOrThrow()),
+                isLoading = false, loadingStep = "", generatingViews = true
+            )
+
+            val views = _uiState.value.resultViews.toMutableList()
+            val side = claudeService.generateTryOnImage(openAiKey, userImagePath, garments, state.profile, "side", bodyRef)
+            if (side.isSuccess) { views.add(side.getOrThrow()); _uiState.value = _uiState.value.copy(resultViews = views.toList()) }
+            _uiState.value = _uiState.value.copy(generatingViews = false)
+        }
+    }
+
+    private suspend fun resolveImagePath(path: String): String {
+        if (!path.startsWith("unsplash:")) return path
+        return UnsplashService.resolveUrl(path.removePrefix("unsplash:")) ?: ""
+    }
+
+    // ── Favorites ────────────────────────────────────────────────────────
+
+    fun addEssentialToFavorites(item: ClothingItem) {
+        viewModelScope.launch {
+            wardrobeRepository.addClothing(item.copy(id = 0, isFavorite = true))
+            _uiState.value = _uiState.value.copy(
+                favoriteEssentialIds = _uiState.value.favoriteEssentialIds + item.id
+            )
+        }
+    }
+
+    fun addEbayToFavorites(item: EbayItem, categoryName: String) {
+        val slot = ebayNameToSlot(categoryName)
+        val category = try { ClothingCategory.valueOf(slot) } catch (_: Exception) { ClothingCategory.INNER }
+        viewModelScope.launch {
+            wardrobeRepository.addClothing(
+                ClothingItem(
+                    imagePath = item.imageUrl,
+                    category = category,
+                    name = item.title.take(60),
+                    notes = "Secondhand · ${item.price} ${item.currency}",
+                    isFavorite = true,
+                    cloudImageUrl = item.imageUrl
+                )
+            )
+            _uiState.value = _uiState.value.copy(
+                favoriteEbayIds = _uiState.value.favoriteEbayIds + item.itemId
+            )
+        }
+    }
+
+    // ── Save ─────────────────────────────────────────────────────────────
+
+    fun saveImage(path: String) {
+        val state = _uiState.value
+        val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+        val garmentParts = state.selectedGarments.values.map { g ->
+            val src = when (g.source) {
+                GarmentTab.WARDROBE   -> "Wardrobe"
+                GarmentTab.ESSENTIALS -> "Essential"
+                GarmentTab.EBAY       -> "Secondhand"
+            }
+            "$src: ${g.displayLabel}"
+        }
+        val note = "$date · ${garmentParts.joinToString(", ")}"
+        viewModelScope.launch {
+            wardrobeRepository.saveImage(SavedImage(path = path, type = "tryon", label = "Try-On", note = note))
+            _uiState.value = _uiState.value.copy(imageSaved = true)
+        }
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+
+    // ── Affiliate URL helpers ────────────────────────────────────────────────
+
+    private fun applyEbayAffiliate(item: EbayItem): EbayItem {
+        if (ebayAffiliateCampaignId.isBlank() || item.itemWebUrl.isBlank()) return item
+        val sep = if (item.itemWebUrl.contains('?')) "&" else "?"
+        return item.copy(
+            itemWebUrl = "${item.itemWebUrl}${sep}mkevt=1&mkcid=1&mkrid=705-53470-19255-0&campid=$ebayAffiliateCampaignId&toolid=10001"
+        )
+    }
+
+    private fun applyAmazonAffiliate(item: EbayItem): EbayItem {
+        if (amazonAssociateTag.isBlank() || item.itemWebUrl.isBlank()) return item
+        val sep = if (item.itemWebUrl.contains('?')) "&" else "?"
+        return item.copy(itemWebUrl = "${item.itemWebUrl}${sep}tag=$amazonAssociateTag")
+    }
+
+    private fun ebayNameToSlot(name: String): String = when (name.lowercase()) {
+        "top"           -> ClothingCategory.INNER.name
+        "jacket"        -> ClothingCategory.OUTERWEAR.name
+        "bottoms"       -> ClothingCategory.PANTS.name
+        "dress", "set"  -> ClothingCategory.DRESS.name
+        "shoes"         -> ClothingCategory.SHOES.name
+        "bag"           -> ClothingCategory.BAG.name
+        else            -> name.uppercase()
+    }
+
+    private fun ensureGenderInQuery(query: String): String {
+        // Resolve gender: profile → inferred → local heuristic → give up
+        val gender = when {
+            _uiState.value.effectiveGender == "Male" || _uiState.value.effectiveGender == "Female" ->
+                _uiState.value.effectiveGender
+            else -> inferGenderLocally(_uiState.value.wardrobe)
+        }
+        val genderWord = when (gender) {
+            "Female" -> "woman"
+            "Male"   -> "man"
+            else     -> return query   // truly unknown — leave as-is
+        }
+        // Strip any existing gender markers, then prepend the correct word.
+        val cleaned = query
+            .replace(Regex("\\bwomen'?s?\\b", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\bmen'?s?\\b", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\bwoman\\b", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\bman\\b", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\bfemale\\b", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\bmale\\b", RegexOption.IGNORE_CASE), "")
+            .trim()
+            .replace(Regex("\\s{2,}"), " ")
+        return "$genderWord $cleaned"
+    }
+
+    private fun parseEbayCategories(text: String): List<EbayTryOnCategory> {
+        val fashnMap = mapOf(
+            "top" to "tops", "jacket" to "tops", "bottoms" to "bottoms",
+            "set" to "one-pieces", "shoes" to "bottoms", "bag" to "tops"
+        )
+        return text.lines().filter { it.startsWith("CAT:") }.mapNotNull { line ->
+            val parts = line.removePrefix("CAT:").split("|")
+            if (parts.size < 3) return@mapNotNull null
+            val name = parts[0].trim()
+            EbayTryOnCategory(
+                name = name, reason = parts[1].trim(),
+                fashnCategory = fashnMap[name] ?: "tops",
+                searchQuery = ensureGenderInQuery(parts[2].trim())
+            )
+        }
+    }
+
+    fun inferEbayCategory(title: String): String {
+        val t = title.lowercase()
+        return when {
+            t.contains("pant") || t.contains("jean") || t.contains("trouser") ||
+            t.contains("short") || t.contains("skirt") -> "bottoms"
+            t.contains("dress") || t.contains("jumpsuit") || t.contains("overall") -> "one-pieces"
+            else -> "tops"
+        }
+    }
+
+    private fun savePhoto(context: Context, uri: Uri): String? = try {
+        val dir = File(context.cacheDir, "tryon").apply { mkdirs() }
+        val file = File(dir, "user_${System.currentTimeMillis()}.jpg")
+        context.contentResolver.openInputStream(uri)?.use { i -> FileOutputStream(file).use { o -> i.copyTo(o) } }
+        file.absolutePath
+    } catch (e: Exception) { null }
+}
+
+// Adapters — convert platform-specific items to EbayItem for the unified TryOn garment model
+
+private fun com.example.myapplication.data.remote.VintedItem.toEbayItem() = EbayItem(
+    itemId     = id,
+    title      = title,
+    price      = price,
+    currency   = currency,
+    imageUrl   = imageUrl,
+    itemWebUrl = itemUrl,
+    condition  = "Secondhand",
+    source     = "Vinted"
+)

@@ -40,6 +40,25 @@ Nothing here grants the paid tier. Set `relayQuota/{uid}.paid = true` from
 whatever verifies a Play purchase; `firestore.rules` denies clients all access
 to that collection, so a user cannot lift their own cap.
 
+## Testing
+
+`npm test` covers signing, the allowlists and the header scrub. `npm run
+test:rules` runs the Firestore rules against the emulator.
+
+The relay's HTTP behaviour — auth, allowlists, quota, forwarding, large
+multipart uploads — can be exercised locally without deploying and without
+the Blaze plan. See [TESTING.md](../TESTING.md) for the emulator recipe and
+what each response means.
+
+Two things there that are easy to get wrong:
+
+- Emulator ports must stay declared in `firebase.json`. Without them the auth
+  emulator does not start, `verifyIdToken` silently reaches production, and a
+  local test either fails confusingly or creates real users.
+- Throwaway upstream values go in `functions/.secret.local`, which is
+  gitignored. The functions need *something* to inject; that the upstream then
+  rejects it is the proof that injection happened server-side.
+
 ## Deploy
 
 Cloud Functions requires the **Blaze** (pay-as-you-go) plan.
@@ -70,6 +89,17 @@ as that is set. Verify before shipping:
 ./gradlew :app:assembleRelease
 strings app/build/outputs/apk/release/app-release.apk | grep -E 'sk-|Bearer '
 ```
+
+## Adding an upstream
+
+Add an entry to `targets.ts` with its origin, path allowlist, how the
+credential attaches, and a quota weight proportional to what a call costs.
+Nothing not declared there can be reached, which is deliberate: the relay is
+otherwise an open proxy for anyone able to create an anonymous account.
+
+Then add the target to `test/targets.test.js` — at minimum, that its
+allowlist refuses a path the app does not use. `taobaounion` is the worked
+example of a target that signs rather than just attaching a header.
 
 ## Rotate the old keys
 

@@ -190,6 +190,17 @@ fun TryOnScreen(
             }
         }
 
+        if (effectivePhotoPath != null) {
+            Spacer(Modifier.height(20.dp))
+            Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                YourModel(
+                    portraitPath = state.virtualModelPath,
+                    building = state.buildingModel,
+                    onRegenerate = { vm.regenerateModel() }
+                )
+            }
+        }
+
         Spacer(Modifier.height(28.dp))
 
         // Step 02: garment selection
@@ -1017,6 +1028,73 @@ fun TryOnResult(
                 }
                 Text(analysis, style = MaterialTheme.typography.bodySmall, color = Ash)
             }
+        }
+    }
+}
+
+/**
+ * The model, as something the user owns.
+ *
+ * Built once from their photo and dressed for every garment after, so it is
+ * worth showing rather than hiding inside the try-on step: it is the reason
+ * the same person comes back each time, and if it does not look like them,
+ * seeing that here is far better than discovering it in a finished look.
+ */
+@Composable
+internal fun YourModel(
+    portraitPath: String,
+    building: Boolean,
+    onRegenerate: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, Mist, RoundedCornerShape(12.dp))
+            .padding(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.width(64.dp).aspectRatio(0.66f)
+                .clip(RoundedCornerShape(8.dp)).background(Paper),
+            contentAlignment = Alignment.Center
+        ) {
+            when {
+                building -> CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp), strokeWidth = 1.5.dp, color = Ash
+                )
+                portraitPath.isNotEmpty() -> FashionImage(
+                    model = portraitPath, contentDescription = "Your model",
+                    modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop
+                )
+                else -> Icon(
+                    Icons.Default.AutoAwesome, contentDescription = null,
+                    tint = Ash, modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text("YOUR MODEL", style = MaterialTheme.typography.labelSmall, color = Warm)
+            Text(
+                when {
+                    building -> "Building it from your photo…"
+                    portraitPath.isNotEmpty() -> "Every try-on is this same person"
+                    else -> "Built from your photo on the first try-on"
+                },
+                style = MaterialTheme.typography.bodySmall, color = Ash
+            )
+        }
+        if (portraitPath.isNotEmpty() && !building) {
+            Text(
+                "Redo",
+                style = MaterialTheme.typography.labelMedium,
+                color = Ink,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(onClick = onRegenerate)
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            )
         }
     }
 }

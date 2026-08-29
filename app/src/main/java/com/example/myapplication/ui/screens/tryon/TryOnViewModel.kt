@@ -180,6 +180,7 @@ class TryOnViewModel(
             profileRepository.getProfile().collect { profile ->
                 val prevGender = _uiState.value.effectiveGender
                 _uiState.value = _uiState.value.copy(profile = profile)
+                ensureModelForCurrentPhoto()
                 val newGender = _uiState.value.effectiveGender
                 if (newGender != prevGender && newGender.isNotEmpty()) loadEssentials(newGender)
                 // Infer gender from existing profile photo if gender not set
@@ -399,6 +400,36 @@ class TryOnViewModel(
 
     // ── Photo ────────────────────────────────────────────────────────────
 
+    /**
+     * Build the portrait as soon as there is a photo to build it from, rather
+     * than on the first try-on. It is something the user owns and should be
+     * able to look at before committing to an outfit — and doing it here keeps
+     * the wait out of the try-on itself.
+     */
+    private fun ensureModelForCurrentPhoto() {
+        val store = virtualModels ?: return
+        val state = _uiState.value
+        val photo = state.userPhotoPath.takeIf { it.isNotEmpty() }
+            ?: state.profile?.bodyImagePath?.takeIf { it.isNotEmpty() }
+            ?: state.profile?.faceImagePath?.takeIf { it.isNotEmpty() }
+            ?: return
+        if (state.buildingModel) return
+        if (store.isFresh(state.profile, photo)) {
+            store.current()?.let {
+                _uiState.value = _uiState.value.copy(virtualModelPath = it.imagePath)
+            }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(buildingModel = true)
+            val model = store.ensure(state.profile, photo)
+            _uiState.value = _uiState.value.copy(
+                buildingModel = false,
+                virtualModelPath = model?.imagePath.orEmpty()
+            )
+        }
+    }
+
     /** Throw the portrait away and build a new one — for when they dislike it. */
     fun regenerateModel() {
         val store = virtualModels ?: return
@@ -422,6 +453,8 @@ class TryOnViewModel(
         viewModelScope.launch {
             val path = savePhoto(context, uri) ?: return@launch
             _uiState.value = _uiState.value.copy(userPhotoPath = path, error = "")
+            // A new photo means the old portrait is no longer this person.
+            ensureModelForCurrentPhoto()
             if (needsGenderInference()) {
                 inferGenderFromPhoto(path)
             }

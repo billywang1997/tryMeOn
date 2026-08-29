@@ -101,6 +101,9 @@ fun TryOnScreen(
                 scraperApiKey = scraperApiKey,
                 serpService = serpService,
                 serpApiKey = serpApiKey,
+                catalog = com.example.myapplication.data.sourcing.ShoppingCatalogFactory.create(
+                    context, claudeApiService, apiKey, rapidApiKey
+                ),
                 virtualModels = com.example.myapplication.data.tryon.VirtualModelStore(
                     com.example.myapplication.AppSettings(context),
                     claudeApiService,

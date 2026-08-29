@@ -21,9 +21,11 @@ import com.example.myapplication.data.sourcing.SourcingQuery
 import com.example.myapplication.data.sourcing.SourcingQuoter
 import com.example.myapplication.data.sourcing.SourcingResult
 import com.example.myapplication.domain.model.ClothingCategory
+import com.example.myapplication.domain.sourcing.MarketBenchmark
 import com.example.myapplication.domain.sourcing.Parcel
 import com.example.myapplication.domain.sourcing.SourcingDefaults
 import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import java.io.File
@@ -69,7 +71,12 @@ class SourceItResultTest {
     fun expandedCardShowsEveryRouteAndTheLandedTotal() {
         compose.setContent {
             Column(Modifier.fillMaxSize().background(Color.White).padding(20.dp)) {
-                ListingCard(item = quoted.single(), expanded = true, onToggle = {})
+                ListingCard(
+                    item = quoted.single(),
+                    benchmark = MarketBenchmark(typicalAud = 189.0, sampleSize = 14),
+                    expanded = true,
+                    onToggle = {}
+                )
             }
         }
 
@@ -89,7 +96,12 @@ class SourceItResultTest {
     fun collapsedCardLeadsWithTheLandedPrice() {
         compose.setContent {
             Column(Modifier.fillMaxSize().background(Color.White).padding(20.dp)) {
-                ListingCard(item = quoted.single(), expanded = false, onToggle = {})
+                ListingCard(
+                    item = quoted.single(),
+                    benchmark = MarketBenchmark(typicalAud = 189.0, sampleSize = 14),
+                    expanded = false,
+                    onToggle = {}
+                )
             }
         }
         // Sticker and landed price must appear together — one without the other
@@ -109,5 +121,25 @@ class SourceItResultTest {
         FileOutputStream(File(dir, name)).use {
             bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
         }
+    }
+
+    @Test
+    fun aSavingIsShownOnlyWhenTheItemIsActuallyCheaper() {
+        // Local market at A$40 against a landed A$47: no claim to make.
+        compose.setContent {
+            Column(Modifier.fillMaxSize().background(Color.White).padding(20.dp)) {
+                ListingCard(
+                    item = quoted.single(),
+                    benchmark = MarketBenchmark(typicalAud = 40.0, sampleSize = 14),
+                    expanded = false,
+                    onToggle = {}
+                )
+            }
+        }
+        val claims = compose
+            .onAllNodes(androidx.compose.ui.test.hasText("under", substring = true))
+            .fetchSemanticsNodes()
+        assertTrue("must not invent a saving", claims.isEmpty())
+        compose.onRoot().save("saving_absent.png")
     }
 }

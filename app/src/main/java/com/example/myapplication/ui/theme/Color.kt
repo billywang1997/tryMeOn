@@ -9,4 +9,8 @@ val Mist      = Color(0xFFE8E8E8)
 val Paper     = Color(0xFFF7F7F7)
 val White     = Color(0xFFFFFFFF)
 val Warm      = Color(0xFFBFA98A)   // subtle warm accent
+// Reserved for a verified saving. Muted on purpose: a bright green would read
+// as a discount sticker, and this figure is meant to read as a finding.
+val Sage      = Color(0xFF4E6B57)
+
 val ErrorRed  = Color(0xFFB00020)

@@ -54,12 +54,11 @@ import java.util.Locale
 @Composable
 fun WishlistScreen(
     repository: WishlistRepository,
-    serpApiKey: String,
+    catalog: com.example.myapplication.data.sourcing.ShoppingCatalog,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val serpService = remember { SerpApiService() }
     val items by repository.observe().collectAsState(emptyList())
     var refreshing by remember { mutableStateOf(false) }
 
@@ -79,7 +78,7 @@ fun WishlistScreen(
                     style = MaterialTheme.typography.labelSmall, color = Ash
                 )
             }
-            if (items.isNotEmpty() && serpApiKey.isNotBlank()) {
+            if (items.isNotEmpty()) {
                 IconButton(
                     onClick = {
                         if (refreshing) return@IconButton
@@ -88,10 +87,14 @@ fun WishlistScreen(
                             val updates = items.map { item ->
                                 async {
                                     val q = item.query.ifBlank { item.title }
-                                    val newPrice = serpService.search(serpApiKey, q, limit = 5)
-                                        .getOrNull()
-                                        ?.firstOrNull { it.title.equals(item.title, ignoreCase = true) || it.itemWebUrl == item.itemWebUrl }
-                                        ?.price
+                                    // Exact-title matching never fired against real
+                                    // results; the same bug made the background
+                                    // price watch a no-op. See PriceMatcher.
+                                    val results = catalog.search(q, limit = 12)
+                                    val newPrice = com.example.myapplication.notifications.PriceMatcher
+                                        .bestPrice(item.title, item.itemWebUrl, results)
+                                        ?.second
+                                        ?.let { "%.2f".format(it) }
                                         ?: item.lastSeenPrice
                                     item.copy(lastSeenPrice = newPrice, lastCheckedAt = System.currentTimeMillis())
                                 }

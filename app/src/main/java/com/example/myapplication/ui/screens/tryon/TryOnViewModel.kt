@@ -150,7 +150,9 @@ class TryOnViewModel(
     private val serpService: SerpApiService? = null,
     private val serpApiKey: String = "",
     /** Null falls back to generating the person alongside the clothes each time. */
-    private val virtualModels: VirtualModelStore? = null
+    private val virtualModels: VirtualModelStore? = null,
+    /** Null keeps the shop tab empty; nothing else depends on it. */
+    private val catalog: com.example.myapplication.data.sourcing.ShoppingCatalog? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TryOnUiState())
@@ -300,21 +302,12 @@ class TryOnViewModel(
             val rawQuery = listOf(item.color, item.name.ifEmpty { item.category.label }).filter { it.isNotBlank() }.joinToString(" ")
             val query = ensureGenderInQuery(rawQuery)
             Log.d("TryOnVM", "shopSimilar: rawQuery='$rawQuery' → finalQuery='$query' effectiveGender=${_uiState.value.effectiveGender} profileGender=${_uiState.value.profile?.gender}")
-            // Fixed quota: Web/Serp(22) → eBay(6) → Amazon(6) → Vinted(6)
-            val serpDeferred   = async { serpService?.search(serpApiKey, query, limit = 22) }
-            val ebayDeferred   = async { ebayService?.search(ebayClientId, ebayClientSecret, query, limit = 6) }
-            val amazonDeferred = async { amazonService?.search(scraperApiKey, query, limit = 6) }
-            val vintedDeferred = async { vintedService?.search(rapidApiKey, query) }
-            val combined = filterByGender(
-                (serpDeferred.await()?.getOrNull() ?: emptyList()).take(22)
-                    .map { applyAggregatorAffiliate(it) } +
-                (ebayDeferred.await()?.getOrNull() ?: emptyList()).take(6)
-                    .map { applyEbayAffiliate(it) } +
-                (amazonDeferred.await()?.getOrNull() ?: emptyList()).take(6)
-                    .map { applyAmazonAffiliate(it) } +
-                (vintedDeferred.await()?.getOrNull()?.map { it.toEbayItem() } ?: emptyList()).take(6)
-                    .map { applyAggregatorAffiliate(it) }
-            )
+            val combined = catalog?.search(
+                englishQuery = query,
+                gender = _uiState.value.effectiveGender,
+                categoryHint = item.category,
+                limit = 16
+            ).orEmpty()
             _uiState.value = _uiState.value.copy(
                 shopSimilarLoading = false,
                 shopSimilarResults = combined,
@@ -355,7 +348,14 @@ class TryOnViewModel(
         viewModelScope.launch {
             val clothes = wardrobeRepository.getAllClothing().first().takeIf { it.isNotEmpty() }
                 ?: BasicWardrobeProvider.items
-            val raw = try { claudeService.getTryOnEbayRecommendations(openAiKey, clothes, _uiState.value.effectiveGender, styleKeywords) }
+            val picked = _uiState.value.selectedGarments.values.map {
+                "${it.slotKey.lowercase()}: ${it.displayLabel}"
+            }
+            val raw = try {
+                claudeService.tryOnWardrobePlan(
+                    openAiKey, clothes, picked, _uiState.value.effectiveGender, styleKeywords
+                )
+            }
             catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(ebayRecoLoading = false, ebayRecoError = "Failed to load recommendations: ${e.message}")
                 return@launch
@@ -373,23 +373,33 @@ class TryOnViewModel(
     private suspend fun fetchEbayCategoryItems(index: Int, rawQuery: String) {
         updateEbayCategory(index) { it.copy(loading = true) }
         val query = ensureGenderInQuery(rawQuery)
-        Log.d("TryOnVM", "fetchCategory[$index]: rawQuery='$rawQuery' → finalQuery='$query' effectiveGender=${_uiState.value.effectiveGender}")
-        // Fixed quota: Web/Serp(22) → eBay(6) → Amazon(6) → Vinted(6)
-        val serpDeferred   = viewModelScope.async { serpService?.search(serpApiKey, query, limit = 22) }
-        val ebayDeferred   = viewModelScope.async { ebayService?.search(ebayClientId, ebayClientSecret, query, limit = 6) }
-        val amazonDeferred = viewModelScope.async { amazonService?.search(scraperApiKey, query, limit = 6) }
-        val vintedDeferred = viewModelScope.async { vintedService?.search(rapidApiKey, query) }
-        val combined = filterByGender(
-            (serpDeferred.await()?.getOrNull() ?: emptyList()).take(22)
-                .map { applyAggregatorAffiliate(it) } +
-            (ebayDeferred.await()?.getOrNull() ?: emptyList()).take(6)
-                .map { applyEbayAffiliate(it) } +
-            (amazonDeferred.await()?.getOrNull() ?: emptyList()).take(6)
-                .map { applyAmazonAffiliate(it) } +
-            (vintedDeferred.await()?.getOrNull()?.map { it.toEbayItem() } ?: emptyList()).take(6)
-                .map { applyAggregatorAffiliate(it) }
-        )
-        updateEbayCategory(index) { it.copy(loading = false, items = combined) }
+        // One source now, and the price on the card is what it costs delivered
+        // rather than a sticker in someone else's currency.
+        val items = catalog?.search(
+            englishQuery = query,
+            gender = _uiState.value.effectiveGender,
+            categoryHint = slotToCategory(_uiState.value.ebayCategories.getOrNull(index)?.name),
+            limit = 16
+        ).orEmpty()
+        Log.d("TryOnVM", "category[$index] '$query' -> ${items.size} landed listings")
+        updateEbayCategory(index) {
+            it.copy(
+                loading = false,
+                items = items,
+                error = if (items.isEmpty()) "No matches on Taobao for this one" else ""
+            )
+        }
+    }
+
+    /** The plan speaks in slot names; sourcing wants a wardrobe category. */
+    private fun slotToCategory(slot: String?): ClothingCategory? = when (slot?.lowercase()) {
+        "top" -> ClothingCategory.INNER
+        "jacket" -> ClothingCategory.OUTERWEAR
+        "bottoms" -> ClothingCategory.PANTS
+        "set" -> ClothingCategory.DRESS
+        "shoes" -> ClothingCategory.SHOES
+        "bag" -> ClothingCategory.BAG
+        else -> null
     }
 
     private fun updateEbayCategory(index: Int, block: (EbayTryOnCategory) -> EbayTryOnCategory) {

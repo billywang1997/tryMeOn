@@ -241,6 +241,12 @@ fun AppNavigation(
                         com.example.myapplication.data.sourcing.ClosetGapService(claudeApiService, apiKey)
                     },
                     wardrobe = sourceWardrobe,
+                    localPrices = remember(sourceContext) {
+                        com.example.myapplication.data.sourcing.AuMarketPrices(
+                            com.example.myapplication.data.remote.SerpApiService(),
+                            com.example.myapplication.AppSettings(sourceContext).serpApiKey
+                        )
+                    },
                     gender = profile?.gender.orEmpty(),
                     initialQuery = prefilled,
                     onTryOn = {
@@ -304,6 +310,7 @@ fun AppNavigation(
                 )
             }
             composable("audit") {
+                val auditContext = LocalContext.current
                 com.example.myapplication.ui.screens.audit.ClosetAuditScreen(
                     wardrobeRepository = wardrobeRepository,
                     profileRepository  = profileRepository,
@@ -315,14 +322,20 @@ fun AppNavigation(
                     ebayAffiliateCampaignId = ebayAffiliateCampaignId,
                     styleKeywords      = styleKeywords,
                     wishlistRepository = wishlistRepository,
+                    catalog            = com.example.myapplication.data.sourcing.ShoppingCatalogFactory.create(
+                        auditContext, claudeApiService, apiKey, rapidApiKey
+                    ),
                     onBack             = { navController.popBackStack() }
                 )
             }
             composable("wishlist") {
                 if (wishlistRepository != null) {
+                    val wishlistContext = LocalContext.current
                     com.example.myapplication.ui.screens.wishlist.WishlistScreen(
                         repository = wishlistRepository,
-                        serpApiKey = serpApiKey,
+                        catalog = com.example.myapplication.data.sourcing.ShoppingCatalogFactory.create(
+                            wishlistContext, claudeApiService, apiKey, rapidApiKey
+                        ),
                         onBack = { navController.popBackStack() }
                     )
                 }

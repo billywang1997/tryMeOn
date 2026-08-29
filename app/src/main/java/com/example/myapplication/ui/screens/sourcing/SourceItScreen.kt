@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.myapplication.data.remote.TaobaoSource
+import com.example.myapplication.data.sourcing.AuMarketPrices
 import com.example.myapplication.data.sourcing.ClosetGap
 import com.example.myapplication.data.sourcing.ClosetGapService
 import com.example.myapplication.data.sourcing.FxPolicy
@@ -49,11 +50,13 @@ import com.example.myapplication.data.sourcing.SourcingResult
 import com.example.myapplication.domain.model.ClothingCategory
 import com.example.myapplication.domain.model.ClothingItem
 import com.example.myapplication.domain.sourcing.DaigouAgent
+import com.example.myapplication.domain.sourcing.MarketBenchmark
 import com.example.myapplication.domain.sourcing.SourcingDefaults
 import com.example.myapplication.ui.theme.Ash
 import com.example.myapplication.ui.theme.Ink
 import com.example.myapplication.ui.theme.Mist
 import com.example.myapplication.ui.theme.Paper
+import com.example.myapplication.ui.theme.Sage
 import com.example.myapplication.ui.theme.Warm
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -74,6 +77,8 @@ fun SourceItScreen(
     repository: SourcingRepository,
     /** Null hides closet-based suggestions; the search box still works. */
     closetGaps: ClosetGapService? = null,
+    /** Null omits the "cheaper than here" comparison. */
+    localPrices: AuMarketPrices? = null,
     wardrobe: List<ClothingItem> = emptyList(),
     gender: String = "",
     initialQuery: String = "",
@@ -92,6 +97,7 @@ fun SourceItScreen(
     var agent by remember { mutableStateOf(SourcingDefaults.defaultAgent) }
     var cardPercent by remember { mutableStateOf(SourcingDefaults.DEFAULT_CARD_SETTLEMENT_PERCENT) }
     var gaps by remember { mutableStateOf<List<ClosetGap>>(emptyList()) }
+    var benchmark by remember { mutableStateOf<MarketBenchmark?>(null) }
 
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
@@ -114,11 +120,14 @@ fun SourceItScreen(
         query = text
         keyboard?.hide()
         scope.launch {
-            loading = true; error = ""; result = null; expandedId = null
+            loading = true; error = ""; result = null; expandedId = null; benchmark = null
             repository.source(text, gender = gender, categoryHint = categoryHint)
                 .onSuccess { result = it }
                 .onFailure { error = it.message ?: "Something went wrong" }
             loading = false
+            // After the listings, not before: the comparison is worth waiting
+            // for but never worth delaying the prices themselves.
+            benchmark = localPrices?.benchmark(text)
         }
     }
 
@@ -169,6 +178,7 @@ fun SourceItScreen(
                     val id = item.listing.itemId + item.listing.title.take(8)
                     ListingCard(
                         item = item,
+                        benchmark = benchmark,
                         expanded = expandedId == id,
                         onToggle = { expandedId = if (expandedId == id) null else id },
                         onTryOn = onTryOn?.let {
@@ -445,6 +455,7 @@ private fun trim(v: Double) = if (v % 1.0 == 0.0) v.toInt().toString() else v.to
 @Composable
 internal fun ListingCard(
     item: SourcedItem,
+    benchmark: MarketBenchmark? = null,
     expanded: Boolean,
     onToggle: () -> Unit,
     onTryOn: (() -> Unit)? = null
@@ -484,6 +495,7 @@ internal fun ListingCard(
                 }
                 Spacer(Modifier.height(2.dp))
                 PriceReveal(item)
+                LocalComparison(item, benchmark)
                 Text(
                     "${best.line.name} · ${best.cost.estimatedDays.first}–${best.cost.estimatedDays.last} days",
                     style = MaterialTheme.typography.labelSmall, color = Ash
@@ -668,4 +680,42 @@ private fun compact(n: Int) = when {
     n >= 10_000 -> "${"%.1f".format(n / 10_000.0)}w"
     n >= 1_000 -> "${"%.1f".format(n / 1_000.0)}k"
     else -> "$n"
+}
+
+/**
+ * How far below the local market this lands.
+ *
+ * A landed price is a number; a landed price against what the same kind of
+ * thing costs here is an argument, and it is the argument the whole feature
+ * exists to make. Shown only when the item is genuinely cheaper and the
+ * comparison rests on enough listings to be a market rather than an anecdote —
+ * an invented saving would cost more trust than a missing one.
+ *
+ * The wording says "similar", because matching an exact product across two
+ * markets is not possible and claiming otherwise would be the larger lie.
+ */
+@Composable
+private fun LocalComparison(item: SourcedItem, benchmark: MarketBenchmark?) {
+    val saving = benchmark?.savingPercentAgainst(item.bestTotalAud) ?: return
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        modifier = Modifier.padding(top = 3.dp)
+    ) {
+        // A hairline rather than a badge: the number is the point, and a loud
+        // chip here would read like a discount sticker rather than a finding.
+        Box(Modifier.width(2.dp).height(13.dp).background(Sage))
+        Text(
+            "$saving% under",
+            style = MaterialTheme.typography.labelMedium,
+            color = Sage,
+            fontWeight = FontWeight.Medium
+        )
+        Text(
+            "similar here · A$${"%.0f".format(benchmark.typicalAud)}",
+            style = MaterialTheme.typography.labelSmall,
+            color = Ash
+        )
+    }
 }

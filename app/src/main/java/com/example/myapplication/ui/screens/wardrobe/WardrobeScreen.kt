@@ -20,6 +20,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -92,6 +93,7 @@ fun WardrobeScreen(
     var completeLookItem by remember { mutableStateOf<ClothingItem?>(null) }
     var sellItem by remember { mutableStateOf<ClothingItem?>(null) }
     var shakeOutfit by remember { mutableStateOf<List<ClothingItem>?>(null) }
+    val wardrobeContext = LocalContext.current
     val scope = rememberCoroutineScope()
 
     // Lightweight weather fetch so the Daily Surprise can offer a weather-based pick.
@@ -291,6 +293,10 @@ fun WardrobeScreen(
                 ebayAffiliateCampaignId = ebayAffiliateCampaignId,
                 wishlistRepository = wishlistRepository,
                 outfitLogs = logs,
+                catalog = com.example.myapplication.data.sourcing.ShoppingCatalogFactory.create(
+                    wardrobeContext, claudeApiService, apiKey,
+                    com.example.myapplication.AppSettings(wardrobeContext).rapidApiKey
+                ),
                 onDismiss = { completeLookItem = null }
             )
         } else {

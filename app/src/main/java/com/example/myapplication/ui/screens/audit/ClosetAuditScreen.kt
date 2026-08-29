@@ -115,6 +115,7 @@ fun parseAuditReport(raw: String): AuditReport? {
 fun ClosetAuditScreen(
     wardrobeRepository: WardrobeRepository,
     profileRepository: UserProfileRepository,
+    catalog: com.example.myapplication.data.sourcing.ShoppingCatalog,
     claudeService: ClaudeApiService,
     apiKey: String,
     ebayClientId: String,
@@ -168,20 +169,8 @@ fun ClosetAuditScreen(
                 // Fetch products for each rec
                 parsed.recommendations.forEachIndexed { idx, rec ->
                     scope.launch {
-                        val results = listOf(
-                            async {
-                                val q = com.example.myapplication.util.ensureGenderInQuery(rec.query, profile?.gender)
-                                ebayService.search(ebayClientId, ebayClientSecret, q, limit = 3)
-                            },
-                            async {
-                                val q = com.example.myapplication.util.ensureGenderInQuery(rec.query, profile?.gender)
-                                serpService.search(serpApiKey, q, limit = 5)
-                            }
-                        ).awaitAll().flatMap { it.getOrNull() ?: emptyList() }
-                            .map { it.copy(itemWebUrl =
-                                if (it.source == "eBay") ebayAffiliate(it.itemWebUrl, ebayAffiliateCampaignId)
-                                else com.example.myapplication.util.Affiliate.wrap(it.itemWebUrl, it.source)) }
-                            .take(6)
+                        val q = com.example.myapplication.util.ensureGenderInQuery(rec.query, profile?.gender)
+                        val results = catalog.search(q, profile?.gender.orEmpty(), limit = 6)
                         report = report?.copy(
                             recommendations = report!!.recommendations.mapIndexed { i, r ->
                                 if (i == idx) r.copy(products = results, loading = false) else r

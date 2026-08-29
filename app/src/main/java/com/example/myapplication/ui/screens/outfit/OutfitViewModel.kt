@@ -90,7 +90,9 @@ class OutfitViewModel(
     private val rapidApiKey: String = "",
     private val serpService: SerpApiService? = null,
     private val scraperApiKey: String = "",
-    private val serpApiKey: String = ""
+    private val serpApiKey: String = "",
+    /** Null leaves the shop strip empty; nothing else depends on it. */
+    private val catalog: com.example.myapplication.data.sourcing.ShoppingCatalog? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(OutfitUiState())
@@ -308,20 +310,8 @@ class OutfitViewModel(
         )
     }
 
-    private suspend fun searchOnline(query: String): List<EbayItem> {
-        val ebayD   = viewModelScope.async { ebayService?.search(ebayClientId, ebayClientSecret, query, limit = 6) }
-        val asosD   = viewModelScope.async { asosService?.search(rapidApiKey, query, limit = 5) }
-        val amazonD = viewModelScope.async { amazonService?.search(scraperApiKey, query, limit = 5) }
-        val serpD   = viewModelScope.async { serpService?.search(serpApiKey, query, limit = 8) }
-        // Affiliate.wrap skips eBay/Amazon sources (those use their own partner programs).
-        fun wrap(items: List<EbayItem>) = items.map {
-            it.copy(itemWebUrl = com.example.myapplication.util.Affiliate.wrap(it.itemWebUrl, it.source))
-        }
-        return wrap(ebayD.await()?.getOrNull() ?: emptyList()) +
-               wrap(asosD.await()?.getOrNull() ?: emptyList()) +
-               wrap(amazonD.await()?.getOrNull() ?: emptyList()) +
-               wrap(serpD.await()?.getOrNull() ?: emptyList())
-    }
+    private suspend fun searchOnline(query: String): List<EbayItem> =
+        catalog?.search(query, gender = "", limit = 16).orEmpty()
 
     private fun matchesQuery(item: ClothingItem, suggestion: String): Boolean {
         val keywords = suggestion.lowercase().split(" ", ",", "-", "_").filter { it.length > 2 }

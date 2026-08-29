@@ -23,7 +23,7 @@ object PriceMatcher {
         "women", "womens", "women's", "shoe", "shoes", "size", "au", "us", "uk"
     )
 
-    internal fun tokens(title: String): Set<String> = title
+    fun tokens(title: String): Set<String> = title
         .lowercase()
         .replace(Regex("[^a-z0-9\\u4e00-\\u9fff]+"), " ")
         .trim()

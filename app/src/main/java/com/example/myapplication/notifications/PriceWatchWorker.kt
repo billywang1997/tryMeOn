@@ -5,7 +5,8 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.myapplication.AppSettings
 import com.example.myapplication.data.local.DataStoreManager
-import com.example.myapplication.data.remote.SerpApiService
+import com.example.myapplication.data.remote.ClaudeApiService
+import com.example.myapplication.data.sourcing.ShoppingCatalogFactory
 import com.example.myapplication.data.repository.WishlistRepository
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -26,21 +27,26 @@ class PriceWatchWorker(
         val settings = AppSettings(context)
         if (!settings.notifyPriceDrops) return Result.success()
 
-        val serpKey = settings.serpApiKey
-        if (serpKey.isBlank()) return Result.success()
+        // Prices are re-checked where the items came from. Watching a Taobao
+        // listing against an Australian shopping search compared two different
+        // markets and would report a "drop" that was really a different product.
+        val apiKey = settings.claudeApiKey
+        if (apiKey.isBlank()) return Result.success()
 
         val store = DataStoreManager(context)
         val repo = WishlistRepository(store)
         val items = repo.observe().first()
         if (items.isEmpty()) return Result.success()
 
-        val service = SerpApiService()
+        val catalog = ShoppingCatalogFactory.create(
+            context, ClaudeApiService(context), apiKey, settings.rapidApiKey
+        )
         val drops = coroutineScope {
             items.map { item ->
                 async {
                     val savedPrice = item.savedPrice.toDoubleOrNull() ?: return@async null
                     val q = item.query.ifBlank { item.title }
-                    val results = service.search(serpKey, q, limit = 10).getOrNull().orEmpty()
+                    val results = catalog.search(q, limit = 12)
                     // Exact-title matching never fired against real search results;
                     // see PriceMatcher for what it does instead.
                     val newPrice = PriceMatcher.bestPrice(item.title, item.itemWebUrl, results)

@@ -93,6 +93,7 @@ fun StyleTwinCard(
     styleKeywords: Set<String>,
     gender: String,
     apiKey: String,
+    catalog: com.example.myapplication.data.sourcing.ShoppingCatalog,
     claudeService: ClaudeApiService,
     ebayService: EbayApiService,
     ebayClientId: String,
@@ -127,11 +128,7 @@ fun StyleTwinCard(
                     val items = parsed.shopQueries.map { rawQ ->
                         val q = com.example.myapplication.util.ensureGenderInQuery(rawQ, gender)
                         scope.async {
-                            val ebay = ebayService.search(ebayClientId, ebayClientSecret, q, limit = 3).getOrNull().orEmpty()
-                                .map { it.copy(itemWebUrl = ebayAffiliate(it.itemWebUrl, ebayAffiliateCampaignId)) }
-                            val serp = serpService.search(serpApiKey, q, limit = 4).getOrNull().orEmpty()
-                                .map { it.copy(itemWebUrl = com.example.myapplication.util.Affiliate.wrap(it.itemWebUrl, it.source)) }
-                            (ebay + serp).take(4)
+                            catalog.search(q, gender.orEmpty(), limit = 4)
                         }
                     }.awaitAll().flatten()
                     products = items

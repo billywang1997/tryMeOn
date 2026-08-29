@@ -210,7 +210,11 @@ fun ProfileScreen(
                 serpService = serpSvc,
                 serpApiKey = serpApiKey,
                 ebayAffiliateCampaignId = ebayAffiliateCampaignId,
-                wishlistRepository = wishlistRepository
+                wishlistRepository = wishlistRepository,
+                catalog = com.example.myapplication.data.sourcing.ShoppingCatalogFactory.create(
+                    context, claudeApiService, apiKey,
+                    com.example.myapplication.AppSettings(context).rapidApiKey
+                )
             )
         }
 

@@ -86,6 +86,7 @@ fun CompleteTheLookSheet(
     wardrobe: List<ClothingItem>,
     gender: String,
     apiKey: String,
+    catalog: com.example.myapplication.data.sourcing.ShoppingCatalog,
     claudeService: ClaudeApiService,
     ebayService: EbayApiService,
     ebayClientId: String,
@@ -150,16 +151,9 @@ fun CompleteTheLookSheet(
         parsed.forEachIndexed { index, piece ->
             scope.launch {
                 val q = com.example.myapplication.util.ensureGenderInQuery(piece.query, gender)
-                val products = coroutineScope {
-                    val ebayD = async { ebayService.search(ebayClientId, ebayClientSecret, q, limit = 4) }
-                    val serpD = async { serpService.search(serpApiKey, q, limit = 6) }
-                    listOf(ebayD, serpD).awaitAll().flatMap { it.getOrNull() ?: emptyList() }
-                }
-                val withAffiliate = products.map { item ->
-                    val wrapped = if (item.source == "eBay") ebayAffiliate(item.itemWebUrl, ebayAffiliateCampaignId)
-                                  else com.example.myapplication.util.Affiliate.wrap(item.itemWebUrl, item.source)
-                    item.copy(itemWebUrl = wrapped)
-                }.take(8)
+                // Landed prices from one source, so the figure here means the
+                // same thing as the figure everywhere else in the app.
+                val withAffiliate = catalog.search(q, gender.orEmpty(), limit = 8)
                 pieces = pieces.mapIndexed { i, p ->
                     if (i == index) p.copy(products = withAffiliate, loading = false,
                         error = if (withAffiliate.isEmpty()) "No products found" else "")

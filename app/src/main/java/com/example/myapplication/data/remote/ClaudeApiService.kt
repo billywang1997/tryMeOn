@@ -313,6 +313,83 @@ Return ONLY a valid JSON array, no markdown:
         api.chat("Bearer $apiKey", request).choices.firstOrNull()?.message?.content ?: "[]"
     }
 
+    /**
+     * What to try on next, judged against the wardrobe rather than fashion.
+     *
+     * The rule this replaces asked for one suggestion per category every time,
+     * so it recommended a bag to someone who owned three and never noticed the
+     * outfit already half-assembled on screen. Here the thin and saturated
+     * categories are computed before asking, anything already selected is named
+     * so the suggestions complete that look, and every line has to say which of
+     * the user's own pieces it works with — a claim that cannot be made without
+     * actually reading the wardrobe.
+     */
+    suspend fun tryOnWardrobePlan(
+        apiKey: String,
+        clothes: List<ClothingItem>,
+        selected: List<String>,
+        gender: String = "",
+        styleKeywords: Set<String> = emptySet()
+    ): String = withContext(Dispatchers.IO) {
+        if (clothes.isEmpty()) return@withContext ""
+
+        val genderWord = when (gender.trim().lowercase()) {
+            "female", "f" -> "women's"
+            "male", "m" -> "men's"
+            else -> ""
+        }
+
+        val byCategory = clothes.groupBy { it.category }
+        val inventory = byCategory.entries.joinToString("\n") { (cat, items) ->
+            "- ${cat.label} (${items.size}): " + items.take(10).joinToString(", ") {
+                listOf(it.color, it.name.ifEmpty { cat.label }).filter(String::isNotBlank).joinToString(" ")
+            }
+        }
+        // Counted here rather than asked for: the model is poor at arithmetic
+        // over a list and this is the whole basis of the recommendation.
+        val thin = com.example.myapplication.domain.model.ClothingCategory.entries
+            .filter { (byCategory[it]?.size ?: 0) <= 1 }
+            .joinToString(", ") { it.label }
+        val saturated = byCategory.entries
+            .filter { it.value.size >= 3 }
+            .joinToString(", ") { "${it.key.label} (${it.value.size})" }
+
+        val palette = clothes.mapNotNull { it.color.takeIf(String::isNotBlank) }
+            .groupingBy { it }.eachCount().entries
+            .sortedByDescending { it.value }.take(3).joinToString(", ") { it.key }
+
+        val alreadyPicked = if (selected.isEmpty()) ""
+            else "Already chosen for this try-on: ${selected.joinToString("; ")}. " +
+                 "Suggest pieces that finish THIS outfit, and do not suggest those slots again."
+
+        val prompt = """
+This is someone's entire wardrobe:
+
+$inventory
+
+Thin or missing categories: ${thin.ifEmpty { "none" }}
+Already well stocked, do not suggest more: ${saturated.ifEmpty { "none" }}
+Dominant colours: ${palette.ifEmpty { "unclear" }}
+${if (styleKeywords.isNotEmpty()) "Style they chose: ${styleKeywords.joinToString(", ")}" else ""}
+$alreadyPicked
+
+Suggest 4 pieces to try on. Rank by how many outfits each unlocks with what they already own — not by what is fashionable, and not one per category. Skip anything they clearly have enough of.
+
+Each search query must read like something typed into a shop search: concrete about cut, fabric and colour${if (genderWord.isNotEmpty()) ", starting with \"$genderWord\"" else ""}. It will be used to search a Chinese marketplace, so describe the garment, never a brand.
+
+The reason must name what it works with from their wardrobe, with counts.
+
+Return EXACTLY 4 lines, nothing else:
+CAT:<one of top|jacket|bottoms|set|shoes|bag>|<reason naming their pieces, under 12 words>|<search query>
+        """.trimIndent()
+
+        val request = OpenAiRequest(
+            messages = listOf(OpenAiMessage("user", listOf(OpenAiContent("text", prompt)))),
+            maxTokens = 320
+        )
+        api.chat("Bearer $apiKey", request).choices.firstOrNull()?.message?.content ?: ""
+    }
+
     suspend fun getTryOnEbayRecommendations(
         apiKey: String,
         clothes: List<ClothingItem>,

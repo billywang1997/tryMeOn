@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Relay spend counters are written only by the relay function through the
+    // Admin SDK, which bypasses these rules. Clients must never touch them —
+    // a client that can write here can reset its own daily cap.
+    match /relayQuota/{uid} {
+      allow read, write: if false;
+    }
+
+    // Which account a Play purchase token was redeemed by. Client-writable
+    // would mean a user could re-point someone else's purchase at themselves.
+    match /purchaseClaims/{token} {
+      allow read, write: if false;
+    }
+
+    // TODO: tighten the rest of the app's collections before launch.
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

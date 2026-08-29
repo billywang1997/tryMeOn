@@ -43,6 +43,30 @@ object Daigou {
     var preferredAgentId: String = ""
         private set
 
+    /**
+     * Parse a configured provider list.
+     *
+     * Format, one provider per entry: `id|name|linkTemplate|referralCode`,
+     * entries separated by `;;`. Kept as configuration rather than code so a
+     * change in an agent's link format — which happens — is an edit to
+     * local.properties, which is what the templates were separated out for in
+     * the first place.
+     */
+    fun parse(config: String): List<Provider> = config
+        .split(";;")
+        .mapNotNull { entry ->
+            val parts = entry.split("|").map(String::trim)
+            if (parts.size < 3) return@mapNotNull null
+            val (id, name, template) = parts
+            // A template with no {url} cannot open a product page; a provider
+            // that silently sends people to a homepage is worse than none.
+            if (id.isEmpty() || name.isEmpty() || !template.contains("{url}")) return@mapNotNull null
+            Provider(id, name, template, parts.getOrElse(3) { "" })
+        }
+
+    /** Configure at startup from settings. */
+    fun init(config: String, preferredAgentId: String = "") = init(parse(config), preferredAgentId)
+
     /** Configure at startup from remote config or settings; never hard-code live codes. */
     fun init(providers: List<Provider>, preferredAgentId: String = "") {
         this.providers = providers

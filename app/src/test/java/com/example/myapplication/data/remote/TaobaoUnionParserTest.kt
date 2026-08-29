@@ -92,4 +92,20 @@ class TaobaoUnionParserTest {
         assertEquals(1, items.size)
         assertEquals("7", items.single().itemId)
     }
+
+    @Test
+    fun `handles the error envelope Taobao actually returns`() {
+        // Captured from eco.taobao.com with a deliberately invalid key. The real
+        // shape carries sub_code but no sub_msg, so a parser that only read
+        // sub_msg would report an empty reason for a very specific failure.
+        val real = """
+        {"error_response":{"code":29,"msg":"Invalid app Key",
+         "sub_code":"isv.appkey-not-exists","request_id":"15s3d8apn54w7"}}
+        """.trimIndent()
+        val result = TaobaoUnionParser.parse(real)
+        assertTrue(result.isFailure)
+        val message = result.exceptionOrNull()!!.message.orEmpty()
+        assertTrue("must name the code", message.contains("29"))
+        assertTrue("must fall back to msg when sub_msg is absent", message.contains("Invalid app Key"))
+    }
 }

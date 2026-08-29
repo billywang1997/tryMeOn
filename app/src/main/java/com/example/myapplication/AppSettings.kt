@@ -54,6 +54,15 @@ class AppSettings(context: Context) {
         get() = prefs.getString("sovrn_site_id", SOVRN_SITE_ID)?.takeIf { it.isNotBlank() } ?: SOVRN_SITE_ID
         set(value) = prefs.edit { putString("sovrn_site_id", value) }
 
+    // Forwarding-agent deep links, as `id|name|template|code` joined by `;;`.
+    var daigouProviders: String
+        get() = prefs.getString("daigou_providers", DAIGOU_PROVIDERS)?.takeIf { it.isNotBlank() } ?: DAIGOU_PROVIDERS
+        set(value) = prefs.edit { putString("daigou_providers", value) }
+
+    var preferredDaigouId: String
+        get() = prefs.getString("preferred_daigou_id", "") ?: ""
+        set(value) = prefs.edit { putString("preferred_daigou_id", value) }
+
     var unsplashAccessKey: String
         get() = prefs.getString("unsplash_access_key", UNSPLASH_KEY) ?: UNSPLASH_KEY
         set(value) = prefs.edit { putString("unsplash_access_key", value) }
@@ -158,5 +167,6 @@ class AppSettings(context: Context) {
         private val SCRAPER_API_KEY = BuildConfig.SCRAPER_API_KEY
         private val SKIMLINKS_ID = BuildConfig.SKIMLINKS_ID
         private val SOVRN_SITE_ID = BuildConfig.SOVRN_SITE_ID
+        private val DAIGOU_PROVIDERS = BuildConfig.DAIGOU_PROVIDERS
     }
 }

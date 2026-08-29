@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
         GoogleImageSearchService.init(settings.googleSearchApiKey, settings.googleSearchEngineId)
         AmazonImageSearchService.init(settings.amazonAccessKey, settings.amazonSecretKey, settings.amazonAssociateTag)
         com.example.myapplication.util.Affiliate.init(settings.skimlinksId, settings.sovrnSiteId)
+        com.example.myapplication.util.Daigou.init(settings.daigouProviders, settings.preferredDaigouId)
 
         lifecycleScope.launch {
             val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser

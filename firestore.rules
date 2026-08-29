@@ -1,10 +1,40 @@
 rules_version = '2';
+
+// Every authenticated user of this app can be anonymous — the app signs people
+// in that way by default — so "is signed in" is not an authorisation check.
+// Anything not scoped to the caller's own uid is readable by anyone who opens
+// the app.
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // A user's wardrobe, profile, history, saved looks and wishlist. Everything
+    // under their own document, and nothing under anyone else's.
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+
+      match /{sub=**} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // Secondhand listings are meant to be browsed by everyone, but only the
+    // seller may create or change one — and only as themselves, so a listing
+    // cannot be posted under someone else's name.
+    match /market_listings/{id} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+                    && request.resource.data.sellerUid == request.auth.uid;
+      allow update, delete: if request.auth != null
+                    && resource.data.sellerUid == request.auth.uid;
+    }
+
     // Relay spend counters are written only by the relay function through the
-    // Admin SDK, which bypasses these rules. Clients must never touch them —
-    // a client that can write here can reset its own daily cap.
+    // Admin SDK, which bypasses these rules. A client that can write here can
+    // reset its own daily cap.
     match /relayQuota/{uid} {
       allow read, write: if false;
     }
@@ -15,9 +45,9 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // TODO: tighten the rest of the app's collections before launch.
+    // Anything not named above is not part of the app.
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false;
     }
   }
 }

@@ -48,6 +48,8 @@ android {
         buildConfigField("String", "EBAY_AFFILIATE_CAMPAIGN_ID","\"${secret("EBAY_AFFILIATE_CAMPAIGN_ID")}\"")
         buildConfigField("String", "SKIMLINKS_ID",              "\"${secret("SKIMLINKS_ID")}\"")
         buildConfigField("String", "SOVRN_SITE_ID",             "\"${secret("SOVRN_SITE_ID")}\"")
+        // Forwarding-agent deep links. See Daigou.parse for the format.
+        buildConfigField("String", "DAIGOU_PROVIDERS",           "\"${secret("DAIGOU_PROVIDERS")}\"")
     }
 
     buildTypes {

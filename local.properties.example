@@ -51,6 +51,14 @@ SCRAPER_API_KEY=
 # Register at https://skimlinks.com (publisher account). ~25,000 merchants.
 SKIMLINKS_ID=
 
+# Forwarding agents for "Order this", as id|name|linkTemplate|referralCode,
+# multiple entries joined by ;;  — {url} is the URL-encoded product link and
+# {code} your referral code. Verify each template against that agent's own
+# affiliate documentation: a wrong one silently loses the commission.
+# Example (placeholder, not a working link):
+#   DAIGOU_PROVIDERS=agent1|Agent One|https://agent.example/order?url={url}&ref={code}|MYCODE
+DAIGOU_PROVIDERS=
+
 # Sovrn Commerce (ex-VigLink) site ID — competitor to Skimlinks for A/B comparison.
 # Register at https://www.sovrn.com/commerce
 SOVRN_SITE_ID=

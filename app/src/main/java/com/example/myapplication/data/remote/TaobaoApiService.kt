@@ -10,6 +10,12 @@ import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 private const val TAG = "TaobaoAPI"
+
+/** The search quota is spent. Distinct from finding nothing. */
+class SearchQuotaExceeded : Exception("Search quota exhausted for now")
+
+/** The search backend cannot be reached or used at all. */
+class SearchUnavailable(message: String) : Exception(message)
 private const val HOST = "taobao-datahub.p.rapidapi.com"
 private const val BASE = "https://$HOST"
 
@@ -66,6 +72,14 @@ class TaobaoApiService {
             val body = client.newCall(req).execute().use { resp ->
                 val raw = resp.body?.string() ?: ""
                 Log.d(TAG, "search status=${resp.code} body=${raw.take(400)}")
+                // A quota or auth failure is not "nothing matched". Returning an
+                // empty list for it tells the user their search was fruitless
+                // when the truth is that we stopped being able to search.
+                when (resp.code) {
+                    429 -> throw SearchQuotaExceeded()
+                    401, 403 -> throw SearchUnavailable("Search is not configured correctly")
+                    in 500..599 -> throw SearchUnavailable("Taobao search is down (${resp.code})")
+                }
                 raw
             }
             parseSearchResponse(body)

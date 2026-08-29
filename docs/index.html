@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tryMeOn — know what it costs at your door</title>
+<meta name="description" content="An Android wardrobe assistant for Australian shoppers. Outfit recommendations from the clothes you already own, cross-border prices worked out to your door in AUD, and virtual try-on before you buy.">
+<style>
+  :root{
+    --ink:#111; --ink-light:#444; --ash:#888; --mist:#e8e8e8;
+    --paper:#f7f7f7; --warm:#bfa98a; --sage:#4e6b57; --white:#fff;
+    --max:960px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--white); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:var(--max); margin:0 auto; padding:0 24px}
+  header{border-bottom:1px solid var(--mist); padding:22px 0}
+  .brand{font-size:20px; letter-spacing:.32em; font-weight:300; text-transform:uppercase}
+  .status{float:right; font-size:12px; letter-spacing:.14em; color:var(--warm);
+    text-transform:uppercase; padding-top:6px}
+
+  .hero{padding:72px 0 56px}
+  h1{font-size:clamp(30px,5.2vw,50px); font-weight:300; letter-spacing:-.02em;
+    line-height:1.15; margin:0 0 22px}
+  .lede{font-size:clamp(17px,2.2vw,20px); color:var(--ink-light); max-width:44em; margin:0}
+
+  .label{font-size:11px; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--warm); font-weight:600; margin:0 0 14px}
+
+  section{padding:52px 0; border-top:1px solid var(--mist)}
+  h2{font-size:clamp(22px,3vw,30px); font-weight:300; letter-spacing:-.01em; margin:0 0 16px}
+  p{max-width:44em}
+  .muted{color:var(--ash)}
+
+  .grid{display:grid; gap:34px; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); margin-top:34px}
+  .shot{margin:0}
+  .shot img{width:100%; border:1px solid var(--mist); border-radius:12px; display:block}
+  .shot figcaption{font-size:13px; color:var(--ash); margin-top:10px}
+
+  .ledger{width:100%; border-collapse:collapse; margin:22px 0; font-size:15px}
+  .ledger td{padding:11px 0; border-bottom:1px solid var(--mist)}
+  .ledger td:last-child{text-align:right; font-variant-numeric:tabular-nums}
+  .ledger tr:last-child td{border-bottom:none; font-weight:600}
+  .ledger .sub{font-size:13px; color:var(--ash)}
+
+  .callout{background:var(--paper); border-radius:12px; padding:22px 24px; margin:26px 0}
+  .callout p{margin:0}
+  .save{color:var(--sage); font-weight:600}
+
+  ul{max-width:44em; padding-left:20px}
+  li{margin-bottom:9px}
+
+  footer{border-top:1px solid var(--mist); padding:34px 0 60px; font-size:14px; color:var(--ash)}
+  a{color:var(--ink)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <span class="brand">tryMeOn</span>
+    <span class="status">In development · Australia</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="hero">
+    <h1>A ¥128 jacket is not an A$26 jacket.</h1>
+    <p class="lede">
+      tryMeOn is an Android wardrobe assistant for shoppers in Australia. It recommends
+      what to buy from the clothes you already own, works out what a cross-border listing
+      actually costs delivered to your door in AUD, and shows the garment on you before
+      you spend anything.
+    </p>
+  </div>
+
+  <section>
+    <p class="label">The problem</p>
+    <h2>Cross-border prices are quoted in a currency, not a cost.</h2>
+    <p>
+      A shopper in Sydney looking at an overseas marketplace sees a number in yuan. What
+      they will actually pay includes domestic shipping inside China, a forwarding agent's
+      service fee, international freight that is billed on the parcel's volume rather than
+      its weight, GST, and their card's foreign transaction margin. None of that is on the
+      listing page, and the gap between the two numbers is routinely two to three times.
+    </p>
+    <p>
+      Most people either overpay because they guessed low, or never order at all because
+      they could not tell. tryMeOn does that arithmetic before the decision, not after the
+      parcel arrives.
+    </p>
+  </section>
+
+  <section>
+    <p class="label">What it does</p>
+    <h2>Four things, in the order someone actually needs them.</h2>
+
+    <div class="grid">
+      <figure class="shot">
+        <img src="img/closet.jpg" alt="The wardrobe screen, showing a user's own catalogued garments">
+        <figcaption><strong>1. Your wardrobe, catalogued.</strong> Photograph each piece; the
+        app classifies it and tracks what you own and how often you wear it.</figcaption>
+      </figure>
+
+      <figure class="shot">
+        <img src="img/gaps.jpg" alt="Recommendations derived from the user's own wardrobe, each with a reason">
+        <figcaption><strong>2. Recommendations from what you own.</strong> Suggestions are
+        ranked by how many outfits each unlocks with existing pieces — and each one says
+        which of your clothes it works with.</figcaption>
+      </figure>
+
+      <figure class="shot">
+        <img src="img/results.jpg" alt="Search results showing listing price and landed price in AUD">
+        <figcaption><strong>3. Priced to your door.</strong> Every result carries the landed
+        cost in AUD beside the listed price, so the comparison is honest.</figcaption>
+      </figure>
+
+      <figure class="shot">
+        <img src="img/tryon.jpg" alt="A virtual try-on render of a garment on a generated model">
+        <figcaption><strong>4. Try it on first.</strong> The garment is rendered on a model
+        built from the user's own photo, so fit and colour can be judged before buying.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">How the price is worked out</p>
+    <h2>Every line shown, nothing folded in.</h2>
+    <p>
+      A real quote from the app for a linen blazer listed at ¥128 — A$26.49 converted, and
+      A$48.64 delivered. The freight line is the one that surprises people: the parcel is
+      light but bulky, so it is billed on 1.5 kg of volume rather than the 400 g it weighs.
+    </p>
+
+    <table class="ledger">
+      <tr><td>Item</td><td>A$26.49</td></tr>
+      <tr><td>Freight <span class="sub">— billed on 1.5 kg of volume, not the 400 g it weighs</span></td><td>A$16.56</td></tr>
+      <tr><td>GST (10%)</td><td>A$4.30</td></tr>
+      <tr><td>Card FX &amp; fees (3%)</td><td>A$1.29</td></tr>
+      <tr><td>Landed at your door</td><td>A$48.64</td></tr>
+    </table>
+
+    <p>
+      The app quotes every shipping route it knows — the marketplace's own consolidated
+      shipping and third-party forwarders, by air and by sea — and names the cheapest,
+      because the spread between them is often larger than the item.
+    </p>
+
+    <div class="grid">
+      <figure class="shot">
+        <img src="img/routes.jpg" alt="A ledger comparing five shipping routes with delivery times and totals">
+        <figcaption>Five routes, priced. Choosing the wrong one costs more than the GST does.</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="img/benchmark.jpg" alt="A listing showing how far below the typical local price it lands">
+        <figcaption>Compared against what similar items cost in Australia — shown only when
+        the item is genuinely cheaper, and only from enough local listings to be a market
+        rather than an anecdote.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">Try-on</p>
+    <h2>The same person, every time.</h2>
+    <p>
+      The app builds one full-body model from the user's photo and keeps it, then dresses
+      that same model for every garment. Generating the person once is what makes two
+      try-ons comparable — and it means the wait happens once rather than on every item.
+    </p>
+    <div class="grid">
+      <figure class="shot">
+        <img src="img/model.jpg" alt="A neutral full-body model generated from a reference photo">
+        <figcaption>The model, built once from a photo and reused.</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="img/tryon.jpg" alt="The same model wearing a specific listed garment">
+        <figcaption>The same model wearing a specific listing. Only the purchased garment is
+        reproduced; everything else is plain grey, so nothing implies you get more than you
+        are buying.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <p class="label">How affiliate links are used</p>
+    <h2>One link, at the point of a decision the user already made.</h2>
+    <ul>
+      <li>A user reaches a product because they searched for it or accepted a recommendation
+          drawn from their own wardrobe. Traffic is intent-driven, not incentivised.</li>
+      <li>Exactly one outbound link per listing, on the item they chose to open. There are no
+          pop-ups, no redirects, no app-wall or reward mechanics, and no injected ads.</li>
+      <li>Prices shown are the landed cost. Nothing is marked up, and the app takes no cut
+          from the user.</li>
+      <li>Where a listing is from an unofficial data source, the app labels it as such rather
+          than presenting it as verified.</li>
+    </ul>
+  </section>
+
+  <section>
+    <p class="label">Status</p>
+    <h2>Built and running; not yet published.</h2>
+    <p>
+      The app is a native Android application in active development, running on real devices
+      today — every screenshot on this page is the app itself, not a mockup. It targets
+      Google Play, with Australia as the launch market. Sign-in, cloud sync, and in-app
+      purchase are implemented; third-party API credentials are held server-side rather than
+      in the app package.
+    </p>
+    <p class="muted">
+      Built by an independent developer in Australia. Contact:
+      <a href="https://github.com/billywang1997/tryMeOn">github.com/billywang1997/tryMeOn</a>
+    </p>
+  </section>
+
+</div>
+
+<footer>
+  <div class="wrap">
+    tryMeOn — wardrobe and cross-border price assistant · Australia ·
+    <a href="https://github.com/billywang1997/tryMeOn">source</a>
+  </div>
+</footer>
+
+</body>
+</html>

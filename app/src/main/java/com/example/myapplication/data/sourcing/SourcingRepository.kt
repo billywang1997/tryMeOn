@@ -150,9 +150,14 @@ class SourcingRepository(
         // order per phrase so a configured affiliate API always wins.
         var used = ""
         var listings: List<TaobaoItem> = emptyList()
+        var blocked: Throwable? = null
         outer@ for (phrase in query.chineseQueries) {
             for (source in sources.filter { it.available }) {
-                val hit = source.search(phrase).getOrNull().orEmpty()
+                val attempt = source.search(phrase)
+                // Remember why we could not search, so an exhausted quota is not
+                // reported to the user as an unlucky search.
+                attempt.exceptionOrNull()?.let { if (blocked == null) blocked = it }
+                val hit = attempt.getOrNull().orEmpty()
                 if (hit.isNotEmpty()) {
                     used = phrase
                     listings = hit
@@ -161,7 +166,9 @@ class SourcingRepository(
             }
         }
         if (listings.isEmpty()) {
-            return Result.failure(NoSuchElementException("No Taobao listings matched that"))
+            return Result.failure(
+                blocked ?: NoSuchElementException("No Taobao listings matched that")
+            )
         }
 
         val priced = listings.mapNotNull { l ->

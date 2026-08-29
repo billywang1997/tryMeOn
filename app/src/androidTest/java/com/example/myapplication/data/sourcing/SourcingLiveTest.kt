@@ -3,6 +3,7 @@ package com.example.myapplication.data.sourcing
 import com.example.myapplication.BuildConfig
 import com.example.myapplication.data.remote.ClaudeApiService
 import com.example.myapplication.data.remote.ScraperProductSearch
+import com.example.myapplication.data.remote.SearchQuotaExceeded
 import com.example.myapplication.data.remote.TaobaoApiService
 import com.example.myapplication.data.remote.TaobaoUnionApiService
 import androidx.test.platform.app.InstrumentationRegistry
@@ -52,6 +53,9 @@ class SourcingLiveTest {
 
         val result = repo().source(phrase, gender = "Female")
         result.exceptionOrNull()?.let { println("FAILED: ${it.message}") }
+        // A spent search quota is an environment limit, not a defect. Failing
+        // here would train everyone to ignore this suite.
+        assumeTrue("search quota exhausted", result.exceptionOrNull() !is SearchQuotaExceeded)
         assertTrue("pipeline failed: ${result.exceptionOrNull()?.message}", result.isSuccess)
 
         val res = result.getOrThrow()
@@ -99,6 +103,7 @@ class SourcingLiveTest {
             println("used: ${it.usedQuery} · ${it.listings.size} listings")
             it.listings.take(3).forEach { l -> println("  ¥${l.priceCny}  ${l.listing.title.take(40)}") }
         }.onFailure { println("FAILED: ${it.message}") }
+        assumeTrue("search quota exhausted", result.exceptionOrNull() !is SearchQuotaExceeded)
         assertTrue(result.isSuccess)
     }
 

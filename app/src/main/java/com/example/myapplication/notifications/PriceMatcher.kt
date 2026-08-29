@@ -57,15 +57,47 @@ object PriceMatcher {
             }
         }
 
-        val wanted = tokens(savedTitle)
-        // Nothing distinctive to match on; refusing beats guessing.
-        if (wanted.isEmpty()) return null
+        val comparable: (String) -> Boolean = if (savedTitle.isCjk()) {
+            // Chinese titles are not space delimited, so word containment
+            // reduces the whole phrase to one token and matches almost nothing.
+            // Character bigrams survive the reordering and padding that seller
+            // titles are full of.
+            val wanted = bigrams(savedTitle)
+            if (wanted.isEmpty()) return null
+            ({ title -> overlap(wanted, bigrams(title)) >= CJK_MIN_OVERLAP })
+        } else {
+            val wanted = tokens(savedTitle)
+            // Nothing distinctive to match on; refusing beats guessing.
+            if (wanted.isEmpty()) return null
+            ({ title -> tokens(title).containsAll(wanted) })
+        }
 
         return candidates
             .mapNotNull { c -> priced(c)?.let { c to it } }
-            .filter { (c, _) -> tokens(c.title).containsAll(wanted) }
+            .filter { (c, _) -> comparable(c.title) }
             // The point of watching is the best price available for the item.
             .minByOrNull { it.second }
+    }
+
+    /** Enough of the same characters, side by side, to be the same product. */
+    private const val CJK_MIN_OVERLAP = 0.6
+
+    private fun String.isCjk(): Boolean {
+        val letters = count { it.isLetterOrDigit() }
+        if (letters == 0) return false
+        return count { it.code in 0x4E00..0x9FFF } * 2 >= letters
+    }
+
+    internal fun bigrams(title: String): Set<String> {
+        val chars = title.filter { it.code in 0x4E00..0x9FFF || it.isLetterOrDigit() }
+        if (chars.length < 2) return emptySet()
+        return (0 until chars.length - 1).map { chars.substring(it, it + 2) }.toSet()
+    }
+
+    /** Share of the saved title's bigrams present in a candidate. */
+    private fun overlap(wanted: Set<String>, candidate: Set<String>): Double {
+        if (wanted.isEmpty()) return 0.0
+        return wanted.count { it in candidate }.toDouble() / wanted.size
     }
 
     /** Prices arrive as "$136.00", "136", "A$1,299.00". */

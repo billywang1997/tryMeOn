@@ -86,15 +86,18 @@ class WorkerTest {
     fun priceWatchRunsAgainstTheRealPriceApi() {
         settings.notifyPriceDrops = true
         runBlocking {
+            // Everything saved now comes from Taobao, so a saved item carries a
+            // Chinese seller title. An English one would never match a Chinese
+            // listing and the test would be checking nothing.
             wishlist.add(
                 EbayItem(
                     itemId = "live-1",
-                    title = "Nike Air Force 1",
+                    title = "亚麻短款西装外套女",
                     price = "500.00",
                     currency = "AUD",
-                    itemWebUrl = "https://example.com/af1"
+                    itemWebUrl = "https://item.taobao.com/item.htm?id=live-1"
                 ),
-                query = "Nike Air Force 1"
+                query = "linen cropped blazer"
             )
         }
         val result = runPriceWatch()
@@ -102,7 +105,7 @@ class WorkerTest {
 
         // Saved at an absurd $500, so any real quote is a drop and the item
         // should come back with a refreshed price recorded against it.
-        val after = runBlocking { wishlist.observe().first() }.first { it.title == "Nike Air Force 1" }
+        val after = runBlocking { wishlist.observe().first() }.first { it.title == "亚麻短款西装外套女" }
         println("price watch: saved=${after.savedPrice} lastSeen=${after.lastSeenPrice}")
 
         // Saved at an absurd $500, so a real quote must come back lower. Before

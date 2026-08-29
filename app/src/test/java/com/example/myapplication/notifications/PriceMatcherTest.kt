@@ -98,9 +98,40 @@ class PriceMatcherTest {
         assertNull(PriceMatcher.bestPrice("men's shoes", "", realResults))
     }
 
+    // ── Chinese titles ──────────────────────────────────────────────────────
+    //
+    // Everything saved now comes from Taobao, so this is the common case rather
+    // than the exotic one. Chinese is not space delimited, so the word rule
+    // above collapses a whole phrase into one token and matches nothing.
+
     @Test
-    fun `matches Chinese titles too`() {
-        val cn = listOf(item("亚麻短款西装外套 女 2026新款", "¥210.90"))
+    fun `matches a seller title padded with the usual marketing`() {
+        val cn = listOf(item("2026春夏新款亚麻短款西装外套女韩版显瘦", "¥210.90"))
         assertEquals(210.90, PriceMatcher.bestPrice("亚麻短款西装外套", "", cn)!!.second, 0.001)
+    }
+
+    @Test
+    fun `matches when the seller reorders the description`() {
+        val cn = listOf(item("女士短款亚麻西装外套 通勤", "¥188.00"))
+        assertEquals(188.0, PriceMatcher.bestPrice("亚麻短款西装外套女", "", cn)!!.second, 0.001)
+    }
+
+    @Test
+    fun `refuses a different Chinese product`() {
+        val cn = listOf(
+            item("纯棉圆领短袖T恤男", "¥39.00"),
+            item("真皮乐福鞋女厚底", "¥299.00")
+        )
+        assertNull(PriceMatcher.bestPrice("亚麻短款西装外套", "", cn))
+    }
+
+    @Test
+    fun `takes the cheapest among Chinese matches`() {
+        val cn = listOf(
+            item("亚麻短款西装外套女 新款", "¥210.90"),
+            item("春季亚麻短款西装外套女", "¥168.00"),
+            item("亚麻短款西装外套女韩版", "¥259.00")
+        )
+        assertEquals(168.0, PriceMatcher.bestPrice("亚麻短款西装外套", "", cn)!!.second, 0.001)
     }
 }

@@ -84,6 +84,22 @@ class AppSettings(context: Context) {
         get() = prefs.getString("google_search_engine_id", GOOGLE_SEARCH_CX) ?: GOOGLE_SEARCH_CX
         set(value) = prefs.edit { putString("google_search_engine_id", value) }
 
+    // The generated full-body portrait every try-on is dressed from. Persisted
+    // rather than cached: it costs a paid image generation, and rebuilding it
+    // each session would also return a slightly different person each time.
+    var virtualModelPath: String
+        get() = prefs.getString("virtual_model_path", "") ?: ""
+        set(value) = prefs.edit { putString("virtual_model_path", value) }
+
+    /** Inputs the stored portrait was built from; a change invalidates it. */
+    var virtualModelSignature: String
+        get() = prefs.getString("virtual_model_signature", "") ?: ""
+        set(value) = prefs.edit { putString("virtual_model_signature", value) }
+
+    var virtualModelCreatedAt: Long
+        get() = prefs.getLong("virtual_model_created_at", 0L)
+        set(value) = prefs.edit { putLong("virtual_model_created_at", value) }
+
     // Last CNY→AUD rate we actually saw, so a landed-cost quote made offline
     // falls back to a real rate rather than to the compiled-in constant.
     var cnyToAudRate: Float

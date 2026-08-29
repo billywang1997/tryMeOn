@@ -79,6 +79,7 @@ fun TryOnScreen(
     amazonAssociateTag: String = "",
     styleKeywords: Set<String> = emptySet()
 ) {
+    val context = LocalContext.current
     val replicateService = remember { ReplicateApiService() }
     val ebayService  = remember { EbayApiService() }
     val amazonService = remember { ScraperApiService() }
@@ -99,11 +100,15 @@ fun TryOnScreen(
                 styleKeywords = styleKeywords,
                 scraperApiKey = scraperApiKey,
                 serpService = serpService,
-                serpApiKey = serpApiKey
+                serpApiKey = serpApiKey,
+                virtualModels = com.example.myapplication.data.tryon.VirtualModelStore(
+                    com.example.myapplication.AppSettings(context),
+                    claudeApiService,
+                    apiKey
+                )
             ) as T
     })
 
-    val context = LocalContext.current
     val state by vm.uiState.collectAsState()
 
     // The ViewModel picks this up in init, but only on first creation — coming

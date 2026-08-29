@@ -15,6 +15,7 @@ import com.example.myapplication.data.remote.SerpApiService
 import com.example.myapplication.data.remote.VintedApiService
 import com.example.myapplication.data.remote.UnsplashService
 import com.example.myapplication.data.repository.UserProfileRepository
+import com.example.myapplication.data.tryon.VirtualModelStore
 import com.example.myapplication.data.repository.WardrobeRepository
 import com.example.myapplication.domain.model.ClothingCategory
 import com.example.myapplication.domain.model.ClothingItem
@@ -95,6 +96,9 @@ data class TryOnUiState(
     val error: String = "",
     val imageSaved: Boolean = false,
     val promptSignInToBackup: Boolean = false,
+    /** The kept portrait every try-on is dressed from, once one exists. */
+    val virtualModelPath: String = "",
+    val buildingModel: Boolean = false,
     val inferredGender: String = "",
     val inferringGender: Boolean = false,
     val favoriteEssentialIds: Set<Long> = emptySet(),
@@ -144,7 +148,9 @@ class TryOnViewModel(
     private val styleKeywords: Set<String> = emptySet(),
     private val scraperApiKey: String = "",
     private val serpService: SerpApiService? = null,
-    private val serpApiKey: String = ""
+    private val serpApiKey: String = "",
+    /** Null falls back to generating the person alongside the clothes each time. */
+    private val virtualModels: VirtualModelStore? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TryOnUiState())
@@ -393,6 +399,25 @@ class TryOnViewModel(
 
     // ── Photo ────────────────────────────────────────────────────────────
 
+    /** Throw the portrait away and build a new one — for when they dislike it. */
+    fun regenerateModel() {
+        val store = virtualModels ?: return
+        val state = _uiState.value
+        val photo = state.userPhotoPath.takeIf { it.isNotEmpty() }
+            ?: state.profile?.bodyImagePath?.takeIf { it.isNotEmpty() }
+            ?: state.profile?.faceImagePath?.takeIf { it.isNotEmpty() }
+            ?: return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(buildingModel = true)
+            val model = store.regenerate(state.profile, photo)
+            _uiState.value = _uiState.value.copy(
+                buildingModel = false,
+                virtualModelPath = model?.imagePath.orEmpty(),
+                resultViews = emptyList()
+            )
+        }
+    }
+
     fun setUserPhoto(context: Context, uri: Uri) {
         viewModelScope.launch {
             val path = savePhoto(context, uri) ?: return@launch
@@ -538,8 +563,27 @@ class TryOnViewModel(
                 return@launch
             }
 
+            // Build the portrait once; every angle and every future try-on is
+            // dressed from it, so the person stays the same and only the clothes
+            // are paid for again.
+            val portrait = virtualModels?.let { store ->
+                if (!store.isFresh(state.profile, userImagePath)) {
+                    _uiState.value = _uiState.value.copy(
+                        buildingModel = true, loadingStep = "Building your model…"
+                    )
+                }
+                store.ensure(state.profile, userImagePath).also {
+                    _uiState.value = _uiState.value.copy(
+                        buildingModel = false, virtualModelPath = it?.imagePath.orEmpty()
+                    )
+                }
+            }
+
             _uiState.value = _uiState.value.copy(loadingStep = "Generating front view…")
-            val front = claudeService.generateTryOnImage(openAiKey, userImagePath, garments, state.profile, "front", bodyRef)
+            val front = claudeService.generateTryOnImage(
+                openAiKey, userImagePath, garments, state.profile, "front", bodyRef,
+                modelPortraitPath = portrait?.imagePath
+            )
             if (front.isFailure) {
                 _uiState.value = _uiState.value.copy(isLoading = false, loadingStep = "", error = front.exceptionOrNull()?.message ?: "Generation failed")
                 return@launch
@@ -550,7 +594,10 @@ class TryOnViewModel(
             )
 
             val views = _uiState.value.resultViews.toMutableList()
-            val side = claudeService.generateTryOnImage(openAiKey, userImagePath, garments, state.profile, "side", bodyRef)
+            val side = claudeService.generateTryOnImage(
+                openAiKey, userImagePath, garments, state.profile, "side", bodyRef,
+                modelPortraitPath = portrait?.imagePath
+            )
             if (side.isSuccess) { views.add(side.getOrThrow()); _uiState.value = _uiState.value.copy(resultViews = views.toList()) }
             _uiState.value = _uiState.value.copy(generatingViews = false)
         }

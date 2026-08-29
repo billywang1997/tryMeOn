@@ -634,18 +634,91 @@ Provide exactly 6 BUY suggestions. Each should be high-impact for this specific 
     // Returns the saved cache file path on success.
     // viewAngle: "front" | "back" | "side"
     // bodyReferencePath: optional full-body photo for accurate proportions (separate from face photo)
+    /**
+     * Build the reusable full-body portrait behind every try-on.
+     *
+     * Generated once from the user's photo and measurements, in plain neutral
+     * clothing, so it can be dressed repeatedly. Separating this from the
+     * try-on itself is what makes the person come out the same every time —
+     * asking for a person and an outfit in one shot re-invents the person.
+     */
+    suspend fun generateModelPortrait(
+        apiKey: String,
+        facePhotoPath: String,
+        profile: UserProfile?
+    ): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val prompt = "Full-length studio portrait of one person, head to toe, " +
+                "facing the camera in a relaxed neutral stance. " +
+                "image[0] is the reference — keep this person's face, hair and skin tone exactly as shown. " +
+                buildBodyDesc(profile) +
+                "Dress them in plain fitted neutral grey underlayers with no pattern, branding or accessories. " +
+                "Plain light grey seamless background, soft even studio lighting, sharp focus, no props, no text."
+
+            val faceBytes = loadImageBytes(facePhotoPath)
+                ?: return@withContext Result.failure(Exception("Unable to read the reference photo"))
+
+            val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
+                .addFormDataPart("model", "gpt-image-1")
+                .addFormDataPart("prompt", prompt)
+                .addFormDataPart("n", "1")
+                .addFormDataPart("size", "1024x1536")
+                .addFormDataPart("image[]", "face.jpg", faceBytes.toRequestBody("image/jpeg".toMediaType()))
+
+            val req = Request.Builder()
+                .url("https://api.openai.com/v1/images/edits")
+                .header("Authorization", "Bearer $apiKey")
+                .post(builder.build())
+                .build()
+
+            val resp = httpClient.newCall(req).execute()
+            val bodyStr = resp.body?.string() ?: ""
+            Log.d("ModelPortrait", "status=${resp.code} body_prefix=${bodyStr.take(160)}")
+            if (!resp.isSuccessful) {
+                return@withContext Result.failure(Exception("Portrait generation failed ${resp.code}: $bodyStr"))
+            }
+
+            val imgData = Gson().fromJson(bodyStr, ImageGenerationResponse::class.java).data?.firstOrNull()
+                ?: return@withContext Result.failure(Exception("No portrait returned"))
+
+            // Stable filename: the portrait is a kept asset, not a cache entry,
+            // and leaving a new file per attempt would fill the app's storage.
+            val outFile = File(context.filesDir, "virtual_model.png")
+            when {
+                imgData.b64Json != null -> {
+                    FileOutputStream(outFile).use { it.write(Base64.decode(imgData.b64Json, Base64.DEFAULT)) }
+                    Result.success(outFile.absolutePath)
+                }
+                imgData.url != null -> Result.success(imgData.url)
+                else -> Result.failure(Exception("No valid portrait returned"))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("Failed to build the model portrait: ${e.message}"))
+        }
+    }
+
     suspend fun generateTryOnImage(
         apiKey: String,
         faceImagePath: String,
         garments: List<Pair<String, String>>,
         profile: UserProfile?,
         viewAngle: String = "front",
-        bodyReferencePath: String? = null
+        bodyReferencePath: String? = null,
+        /**
+         * A previously generated portrait. When present it replaces the raw
+         * photo entirely — it already carries the face and the proportions, and
+         * reusing one image is what keeps the same person across try-ons.
+         */
+        modelPortraitPath: String? = null
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
             val bodyDesc = buildBodyDesc(profile)
-            // If a body reference is provided it becomes image[1], garments follow after.
-            val hasBodyRef = bodyReferencePath != null && bodyReferencePath != faceImagePath
+            val portrait = modelPortraitPath?.takeIf { it.isNotBlank() && File(it).exists() }
+            val identityPath = portrait ?: faceImagePath
+            // A portrait already shows the whole body, so a separate reference
+            // would only be a second, conflicting source of proportions.
+            val hasBodyRef = portrait == null &&
+                bodyReferencePath != null && bodyReferencePath != faceImagePath
             val garmentStartIndex = if (hasBodyRef) 2 else 1
             val garmentList = garments.mapIndexed { i, (_, label) -> "image[${garmentStartIndex + i}]: $label" }.joinToString("; ")
             val angleDesc = when (viewAngle) {
@@ -657,8 +730,13 @@ Provide exactly 6 BUY suggestions. Each should be high-impact for this specific 
                 "image[1] shows the model's full body — use it to match their exact proportions and figure. "
             else ""
 
+            val identityNote = if (portrait != null)
+                "image[0] is the model — keep their face, hair, skin tone and body proportions exactly as shown. "
+            else
+                "image[0] is the face reference — keep the model's face and hair exactly as shown. "
+
             val prompt = "Fashion lookbook photo. $angleDesc " +
-                "image[0] is the face reference — keep the model's face and hair exactly as shown. " +
+                identityNote +
                 bodyRefNote +
                 "Dress the model in: $garmentList. " +
                 bodyDesc +
@@ -671,10 +749,10 @@ Provide exactly 6 BUY suggestions. Each should be high-impact for this specific 
                 .addFormDataPart("n", "1")
                 .addFormDataPart("size", "1024x1536")
 
-            // image[0]: face/identity reference
-            val faceBytes = loadImageBytes(faceImagePath)
-                ?: return@withContext Result.failure(Exception("Unable to read face photo"))
-            builder.addFormDataPart("image[]", "face.jpg", faceBytes.toRequestBody("image/jpeg".toMediaType()))
+            // image[0]: the kept portrait when there is one, else the raw photo
+            val faceBytes = loadImageBytes(identityPath)
+                ?: return@withContext Result.failure(Exception("Unable to read the model photo"))
+            builder.addFormDataPart("image[]", "model.jpg", faceBytes.toRequestBody("image/jpeg".toMediaType()))
 
             // image[1]: optional full-body reference for proportions
             if (hasBodyRef) {

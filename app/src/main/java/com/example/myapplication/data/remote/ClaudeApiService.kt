@@ -741,6 +741,15 @@ Provide exactly 6 BUY suggestions. Each should be high-impact for this specific 
                 "Dress the model in: $garmentList. " +
                 bodyDesc +
                 "Match each garment's exact color, pattern, and texture from its reference image. " +
+                // Listing photos are styled full outfits. Copying the rest of the
+                // look would show the shopper wearing things they are not buying.
+                // "Neutral basics" was too abstract: the model kept matching the
+                // listing's palette, so the filler still read as part of the set.
+                // Naming an exact colour is what actually separates the two.
+                "Reproduce ONLY the listed garments from the references. Every other " +
+                "clothing item must be plain mid-grey (#8A8A8A) with no pattern, print " +
+                "or hardware, visibly not part of the same outfit. Do not copy any other " +
+                "clothing, accessory or styling detail from the reference images. " +
                 "Full-length shot head to toe. Clean studio background, fashion photography lighting."
 
             val builder = MultipartBody.Builder().setType(MultipartBody.FORM)

@@ -168,8 +168,8 @@ export const TARGETS: Record<string, Target> = {
 // --- Taobao Open Platform (TOP) request signing ---
 
 /** TOP wants Beijing wall-clock time, not UTC, in `yyyy-MM-dd HH:mm:ss`. */
-function beijingTimestamp(): string {
-  const beijing = new Date(Date.now() + 8 * 60 * 60 * 1000);
+export function beijingTimestamp(now: number = Date.now()): string {
+  const beijing = new Date(now + 8 * 60 * 60 * 1000);
   return beijing.toISOString().replace("T", " ").slice(0, 19);
 }
 
@@ -178,7 +178,7 @@ function beijingTimestamp(): string {
  * Any deviation — a stray parameter, the wrong sort, the wrong clock — comes
  * back as an opaque "invalid signature" from Taobao.
  */
-function topSign(params: URLSearchParams, secret: string): string {
+export function topSign(params: URLSearchParams, secret: string): string {
   const keys = [...params.keys()].sort();
   const joined = keys.map((k) => k + params.get(k)).join("");
   return createHash("md5")

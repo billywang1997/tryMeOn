@@ -116,3 +116,19 @@ test("polling a try-on job is free, starting one is not", () => {
   assert.strictEqual(TARGETS.fashn.weigh("/v1/status/abc"), 0);
   assert.ok(TARGETS.fashn.weigh("/v1/run") > 0);
 });
+
+// ── Headers that must not be forwarded ──────────────────────────────────────
+
+test("hop-by-hop and Expect headers are stripped", () => {
+  const { STRIP_HEADERS } = require("../lib/index");
+  // A forwarded Expect: 100-continue makes the outbound fetch fail outright,
+  // which surfaced as a bare 502 on any large multipart upload.
+  for (const h of ["expect", "te", "trailer", "connection", "keep-alive", "transfer-encoding"]) {
+    assert.ok(STRIP_HEADERS.has(h), `${h} would be forwarded`);
+  }
+  // The caller's own credential must never reach the upstream.
+  assert.ok(STRIP_HEADERS.has("authorization"));
+  assert.ok(STRIP_HEADERS.has("x-relay-target"));
+  // Content-type must survive: it carries the multipart boundary.
+  assert.ok(!STRIP_HEADERS.has("content-type"));
+});

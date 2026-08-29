@@ -40,11 +40,11 @@ class PriceWatchWorker(
                 async {
                     val savedPrice = item.savedPrice.toDoubleOrNull() ?: return@async null
                     val q = item.query.ifBlank { item.title }
-                    val newPrice = service.search(serpKey, q, limit = 5)
-                        .getOrNull()
-                        ?.firstOrNull { it.title.equals(item.title, ignoreCase = true) || it.itemWebUrl == item.itemWebUrl }
-                        ?.price
-                        ?.toDoubleOrNull()
+                    val results = service.search(serpKey, q, limit = 10).getOrNull().orEmpty()
+                    // Exact-title matching never fired against real search results;
+                    // see PriceMatcher for what it does instead.
+                    val newPrice = PriceMatcher.bestPrice(item.title, item.itemWebUrl, results)
+                        ?.second
                         ?: return@async null
                     repo.update(item.copy(
                         lastSeenPrice = newPrice.toString(),

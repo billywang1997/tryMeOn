@@ -25,7 +25,7 @@ export { verifyPurchase } from "./purchases";
 initializeApp();
 
 /** Headers that describe *our* hop and must not be replayed upstream. */
-const STRIP = new Set([
+export const STRIP_HEADERS = new Set([
   "host",
   "authorization",
   "content-length",
@@ -33,6 +33,12 @@ const STRIP = new Set([
   "keep-alive",
   "transfer-encoding",
   "upgrade",
+  // Hop-by-hop, and a forwarded Expect: 100-continue makes the outbound
+  // fetch fail outright — curl adds it to any large upload, so a multipart
+  // try-on from such a client returned 502 with nothing to explain it.
+  "expect",
+  "te",
+  "trailer",
   "proxy-authorization",
   "x-relay-target",
   "x-relay-host",
@@ -111,7 +117,7 @@ export const relay = onRequest(
 
     const headers = new Headers();
     for (const [k, v] of Object.entries(req.headers)) {
-      if (STRIP.has(k.toLowerCase()) || v === undefined) continue;
+      if (STRIP_HEADERS.has(k.toLowerCase()) || v === undefined) continue;
       headers.set(k, Array.isArray(v) ? v.join(", ") : v);
     }
 
@@ -159,7 +165,10 @@ export const relay = onRequest(
       res.status(upstream.status).send(buf);
     } catch (err) {
       await refund(uid, units);
-      logger.error("relay failed", { uid, targetName, path, err: String(err) });
+      // fetch reports every transport problem as "TypeError: fetch failed";
+      // without the cause a failure like this is undiagnosable from logs.
+      const cause = err instanceof Error && err.cause ? String(err.cause) : undefined;
+      logger.error("relay failed", { uid, targetName, path, err: String(err), cause });
       res.status(502).json({ error: "Upstream request failed" });
     }
   }

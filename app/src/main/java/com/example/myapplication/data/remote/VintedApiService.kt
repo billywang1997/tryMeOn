@@ -26,7 +26,7 @@ data class VintedItem(
 
 class VintedApiService {
 
-    private val client = OkHttpClient.Builder()
+    private val client = RelayHttp.builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build()

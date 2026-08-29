@@ -78,3 +78,40 @@ data class OutfitLog(
     val itemIds: List<Long>,
     val note: String = ""
 )
+
+/** A second-hand listing posted by another user (or this user). */
+data class MarketListing(
+    val id: String = "",
+    val sellerUid: String = "",
+    val sellerName: String = "",
+    val sellerEmail: String = "",     // for buyer contact (mailto)
+    val title: String = "",
+    val category: String = "",        // ClothingCategory.name
+    val color: String = "",
+    val brand: String = "",
+    val condition: String = "Good",   // Like new / Good / Fair
+    val size: String = "",
+    val askingPrice: Double = 0.0,
+    val originalPrice: Double = 0.0,
+    val currency: String = "AUD",
+    val imageUrl: String = "",        // public Firebase Storage URL
+    val note: String = "",
+    val city: String = "",
+    val createdAt: Long = System.currentTimeMillis(),
+    val sold: Boolean = false
+)
+
+/** Items the user has "watched" — sourced from any shop card across the app. */
+data class WishlistItem(
+    val id: String,                // stable: source + sku/title hash
+    val title: String,
+    val imageUrl: String = "",
+    val itemWebUrl: String = "",
+    val source: String = "",       // "eBay", "Amazon", "Google Shopping", retailer name
+    val currency: String = "AUD",
+    val savedPrice: String = "",   // raw numeric string at save time
+    val lastSeenPrice: String = "",// last refreshed price
+    val lastCheckedAt: Long = 0L,  // ms epoch
+    val savedAt: Long = System.currentTimeMillis(),
+    val query: String = ""         // query that surfaced this item — used for re-search
+)

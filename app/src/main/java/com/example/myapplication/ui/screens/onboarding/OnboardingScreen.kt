@@ -68,6 +68,7 @@ fun OnboardingScreen(
     claudeApiService: ClaudeApiService? = null,
     apiKey: String = "",
     authRepository: FirebaseAuthRepository? = null,
+    firestoreRepository: com.example.myapplication.data.remote.FirestoreRepository? = null,
     onComplete: (styles: Set<String>) -> Unit
 ) {
     var step by remember { mutableIntStateOf(0) }
@@ -103,10 +104,13 @@ fun OnboardingScreen(
                 onNext = { step = 4 },
                 onSkip = { step = 4 }
             )
-            4 -> AuthStep(
+            4 -> FeaturesStep(onNext = { step = 5 })
+            5 -> AuthStep(
                 authRepository = authRepository,
+                profileRepository = profileRepository,
+                firestoreRepository = firestoreRepository,
                 styles = selectedStyles,
-                onComplete = { step = 5 }
+                onComplete = { step = 6 }
             )
             else -> DoneStep(onComplete = { onComplete(selectedStyles) })
         }
@@ -230,7 +234,7 @@ private fun StyleStep(
                 .padding(horizontal = 28.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            StepDots(total = 5, current = 0)
+            StepDots(total = 6, current = 0)
             Spacer(Modifier.height(18.dp))
             Button(
                 onClick = onNext,
@@ -388,7 +392,7 @@ private fun ProfileStep(
                 .padding(horizontal = 28.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            StepDots(total = 5, current = 1)
+            StepDots(total = 6, current = 1)
             Spacer(Modifier.height(18.dp))
             Button(
                 onClick = {
@@ -481,17 +485,25 @@ private fun PhotoStep(
         viewModel = batchVm,
         onDone = { onNext() },
         onSkip = onSkip,
-        stepIndicator = { StepDots(total = 5, current = 2) }
+        stepIndicator = { StepDots(total = 6, current = 2) }
     )
 }
 
 @Composable
 private fun AuthStep(
     authRepository: FirebaseAuthRepository?,
+    profileRepository: UserProfileRepository?,
+    firestoreRepository: com.example.myapplication.data.remote.FirestoreRepository?,
     styles: Set<String>,
     onComplete: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
+
+    // Pushes onboarding data (styles, profile) to Firestore once an account exists.
+    suspend fun syncOnboardingData(uid: String, name: String, email: String, anonymous: Boolean) {
+        firestoreRepository?.saveUserMeta(uid, name, email, anonymous, styles)
+        profileRepository?.getProfileOnce()?.let { profileRepository.saveProfile(it) }
+    }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
@@ -553,7 +565,7 @@ private fun AuthStep(
                 .padding(horizontal = 28.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            StepDots(total = 5, current = 3)
+            StepDots(total = 6, current = 4)
             Spacer(Modifier.height(18.dp))
             Button(
                 onClick = {
@@ -562,7 +574,10 @@ private fun AuthStep(
                         val repo = authRepository
                         if (repo != null && email.isNotBlank() && password.isNotBlank()) {
                             repo.createAccount(email.trim(), password, name.trim())
-                                .onSuccess { onComplete() }
+                                .onSuccess { user ->
+                                    syncOnboardingData(user.uid, name.trim(), email.trim(), anonymous = false)
+                                    onComplete()
+                                }
                                 .onFailure { e ->
                                     loading = false
                                     error = when {
@@ -573,6 +588,8 @@ private fun AuthStep(
                                 }
                         } else {
                             repo?.signInAnonymously()
+                                ?.getOrNull()
+                                ?.let { syncOnboardingData(it.uid, "", "", anonymous = true) }
                             onComplete()
                         }
                     }
@@ -591,10 +608,92 @@ private fun AuthStep(
                 scope.launch {
                     loading = true
                     authRepository?.signInAnonymously()
+                        ?.getOrNull()
+                        ?.let { syncOnboardingData(it.uid, "", "", anonymous = true) }
                     onComplete()
                 }
             }) {
                 Text("Continue as Guest →", style = MaterialTheme.typography.labelMedium, color = Ash)
+            }
+            Text(
+                "Guest mode skips cloud backup and can't list items on the Marketplace. You can create an account later in Profile.",
+                style = MaterialTheme.typography.labelSmall,
+                color = Ash,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+            )
+        }
+    }
+}
+
+private data class FeatureHighlight(val emoji: String, val title: String, val desc: String)
+
+private val featureHighlights = listOf(
+    FeatureHighlight("🪞", "AI Styling", "Outfit ideas for any occasion, built from your own closet"),
+    FeatureHighlight("👗", "Virtual Try-On", "See how new pieces look on you before you buy"),
+    FeatureHighlight("✨", "Closet Audit", "A pro stylist's report card for your wardrobe"),
+    FeatureHighlight("🔎", "Dupe Finder", "Designer looks for a fraction of the price"),
+    FeatureHighlight("🤍", "Wishlist Alerts", "Save pieces and get pinged when prices drop")
+)
+
+@Composable
+private fun FeaturesStep(onNext: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = 160.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 28.dp)
+        ) {
+            Spacer(Modifier.height(72.dp))
+            Text("What you", style = MaterialTheme.typography.titleLarge, color = Ash, fontWeight = FontWeight.Light)
+            Text("can do.", style = MaterialTheme.typography.displaySmall, color = Ink, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            Text("A few things to try once you're in", style = MaterialTheme.typography.bodyMedium, color = Ash)
+            Spacer(Modifier.height(32.dp))
+
+            featureHighlights.forEach { f ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFF5F5F5)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(f.emoji, fontSize = 22.sp)
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    Column {
+                        Text(f.title, style = MaterialTheme.typography.titleSmall, color = Ink, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(2.dp))
+                        Text(f.desc, style = MaterialTheme.typography.bodySmall, color = Ash)
+                    }
+                }
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(Color.White)
+                .padding(horizontal = 28.dp, vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            StepDots(total = 6, current = 3)
+            Spacer(Modifier.height(18.dp))
+            Button(
+                onClick = onNext,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Ink)
+            ) {
+                Text("CONTINUE", style = MaterialTheme.typography.labelLarge, letterSpacing = 2.sp, color = Color.White)
             }
         }
     }
@@ -618,6 +717,11 @@ private fun DoneStep(onComplete: () -> Unit) {
             Text("All set.", style = MaterialTheme.typography.displaySmall, color = Ink, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             Text("Your wardrobe is ready.", style = MaterialTheme.typography.bodyLarge, color = Ash)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "No items yet? Your closet starts with curated Essentials — add your own pieces anytime with the + button.",
+                style = MaterialTheme.typography.bodySmall, color = Ash
+            )
         }
 
         Column(
@@ -627,7 +731,7 @@ private fun DoneStep(onComplete: () -> Unit) {
                 .padding(horizontal = 28.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            StepDots(total = 5, current = 4)
+            StepDots(total = 6, current = 5)
             Spacer(Modifier.height(18.dp))
             Button(
                 onClick = onComplete,

@@ -28,12 +28,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.material.icons.filled.Checkroom
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ShoppingBag
-import com.example.myapplication.data.remote.AmazonRealTimeApiService
+import com.example.myapplication.data.remote.ScraperApiService
 import com.example.myapplication.data.remote.AsosApiService
 import com.example.myapplication.data.remote.ClaudeApiService
 import com.example.myapplication.data.remote.EbayApiService
 import com.example.myapplication.data.remote.EbayItem
-import com.example.myapplication.data.remote.RealTimeProductSearchService
+import com.example.myapplication.data.remote.SerpApiService
 import com.example.myapplication.data.remote.WeatherInfo
 import com.example.myapplication.data.repository.UserProfileRepository
 import com.example.myapplication.data.repository.WardrobeRepository
@@ -45,6 +45,7 @@ import com.example.myapplication.ui.components.FashionImage
 import com.example.myapplication.ui.screens.tryon.GarmentThumb
 import com.example.myapplication.ui.theme.*
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.style.TextAlign
 
 @Composable
 fun OutfitScreen(
@@ -56,6 +57,8 @@ fun OutfitScreen(
     ebayClientId: String = "",
     ebayClientSecret: String = "",
     rapidApiKey: String = "",
+    scraperApiKey: String = "",
+    serpApiKey: String = "",
     onNavigateToCalendar: () -> Unit = {},
     onNavigateToEmergency: () -> Unit = {},
     onNavigateToRating: () -> Unit = {},
@@ -64,15 +67,15 @@ fun OutfitScreen(
 ) {
     val ebayService   = remember { EbayApiService() }
     val asosService   = remember { AsosApiService() }
-    val amazonService = remember { AmazonRealTimeApiService() }
-    val rtpsService   = remember { RealTimeProductSearchService() }
+    val amazonService = remember { ScraperApiService() }
+    val serpService   = remember { SerpApiService() }
     val vm: OutfitViewModel = viewModel(factory = object : androidx.lifecycle.ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
             OutfitViewModel(
                 wardrobeRepository, profileRepository, claudeApiService, apiKey,
                 ebayService, asosService, amazonService, ebayClientId, ebayClientSecret, rapidApiKey,
-                rtpsService
+                serpService, scraperApiKey, serpApiKey
             ) as T
     })
 
@@ -389,6 +392,19 @@ fun OutfitScreen(
                                 "Saved to My Looks — tap to view",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = Color(0xFF4CAF50)
+                            )
+                        }
+                        if (state.promptSignInToBackup) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Sign in to back up your looks to the cloud",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Ash,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onNavigateToProfile() }
+                                    .padding(vertical = 4.dp),
+                                textAlign = TextAlign.Center
                             )
                         }
                     } else {

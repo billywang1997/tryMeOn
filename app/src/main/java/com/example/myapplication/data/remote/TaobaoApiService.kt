@@ -17,14 +17,30 @@ data class TaobaoItem(
     val itemId: String = "",
     val itemIdStr: String = "",
     val title: String = "",
+    /** Listed price in CNY, as text — sellers publish ranges as well as figures. */
     val price: String = "",
     val imageUrl: String = "",
-    val itemUrl: String = ""
+    val itemUrl: String = "",
+    /** Seller/shop name. Empty from the scraper, populated by the affiliate API. */
+    val shop: String = "",
+    /** Face value of an available coupon, in CNY. Zero when there is none. */
+    val couponCny: Double = 0.0,
+    /** Units sold — the closest thing Taobao gives to a trust signal. */
+    val sold: Int = 0,
+    /** Where this record came from, so the UI can be honest about data quality. */
+    val source: TaobaoSource = TaobaoSource.SCRAPER
 )
+
+/**
+ * Taobao data has two very different provenances and the difference is worth
+ * surfacing: the affiliate API is official, complete and pays commission, while
+ * the scraper is a stopgap that can go stale or empty without warning.
+ */
+enum class TaobaoSource { AFFILIATE, SCRAPER }
 
 class TaobaoApiService {
 
-    private val client = OkHttpClient.Builder()
+    private val client = RelayHttp.builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
@@ -56,43 +72,64 @@ class TaobaoApiService {
         }
     }
 
-    private fun parseSearchResponse(body: String): List<TaobaoItem> {
-        // Response envelope: { "result": { "status": {...}, "resultList": [ { "item": {...} }, ... ] } }
+    internal fun parseSearchResponse(body: String): List<TaobaoItem> =
+        TaobaoScraperParser.parse(body)
+}
+
+/**
+ * Response shape for the unofficial item_search endpoint (apiVersion 4.0.5).
+ *
+ * Split out and tested against a captured payload because the shape is nothing
+ * like the obvious one: there is no top-level `price` at all — it lives under
+ * `sku.def`, the image field is `image` rather than `picUrl`, and every URL
+ * comes back protocol-relative. Reading it wrong does not fail loudly; it
+ * silently drops every listing for having no price.
+ */
+object TaobaoScraperParser {
+
+    fun parse(body: String): List<TaobaoItem> = runCatching {
         val root = JSONObject(body)
-        val resultNode = root.optJSONObject("result") ?: root
-        val statusCode = resultNode.optJSONObject("status")?.optInt("code", 0) ?: 0
-        if (statusCode != 0 && statusCode != 200) return emptyList()
-        val arr = resultNode.optJSONArray("resultList") ?: return emptyList()
-        val result = mutableListOf<TaobaoItem>()
-        for (i in 0 until arr.length()) {
-            val wrapper = arr.optJSONObject(i) ?: continue
-            val obj = wrapper.optJSONObject("item") ?: wrapper
-            // Log first item's full keys so we can identify the correct image field
-            if (i == 0) Log.d(TAG, "item[0] keys=${obj.keys().asSequence().toList()} json=${obj.toString().take(600)}")
-            val imageUrl = ensureHttps(
-                obj.optString("picUrl").ifEmpty {
-                obj.optString("pic_url").ifEmpty {
-                obj.optString("mainPicUrl").ifEmpty {
-                obj.optString("pic").ifEmpty {
-                obj.optString("image").ifEmpty {
-                obj.optString("img").ifEmpty {
-                // sometimes nested: "pic": {"url": "..."}
-                obj.optJSONObject("pic")?.optString("url") ?: ""
-                }}}}}}
-            )
-            val item = TaobaoItem(
-                itemId    = obj.optString("itemId").ifEmpty { obj.optString("item_id") },
-                itemIdStr = obj.optString("itemIdStr").ifEmpty { obj.optString("item_id_str") },
-                title     = obj.optString("title").ifEmpty { obj.optString("name") },
-                price     = obj.optString("price").ifEmpty { obj.optString("priceWap") },
-                imageUrl  = imageUrl,
-                itemUrl   = obj.optString("detail_url").ifEmpty { obj.optString("item_url") }
-            )
-            if (item.title.isNotEmpty()) result.add(item)
+        val result = root.optJSONObject("result") ?: root
+        val status = result.optJSONObject("status")?.optInt("code", 200) ?: 200
+        if (status != 0 && status != 200) return emptyList()
+
+        val arr = result.optJSONArray("resultList") ?: return emptyList()
+        buildList {
+            for (i in 0 until arr.length()) {
+                val wrapper = arr.optJSONObject(i) ?: continue
+                val o = wrapper.optJSONObject("item") ?: wrapper
+                val title = o.optString("title")
+                if (title.isEmpty()) continue
+
+                val def = o.optJSONObject("sku")?.optJSONObject("def")
+                // promotionPrice is what the buyer actually pays; `price` is the
+                // pre-discount figure and quoting it overstates the landed cost.
+                val price = def?.optString("promotionPrice")?.takeIf { it.isNotBlank() }
+                    ?: def?.optString("price").orEmpty()
+
+                val id = o.optString("itemId").ifEmpty { o.optString("item_id") }
+                add(
+                    TaobaoItem(
+                        itemId = id,
+                        itemIdStr = o.optString("itemIdStr"),
+                        title = title,
+                        price = price,
+                        imageUrl = https(o.optString("image").ifEmpty { o.optString("picUrl") }),
+                        itemUrl = https(
+                            o.optString("itemUrl").ifEmpty {
+                                if (id.isNotEmpty()) "//item.taobao.com/item.htm?id=$id" else ""
+                            }
+                        ),
+                        sold = o.optString("sales").toIntOrNull() ?: 0,
+                        source = TaobaoSource.SCRAPER
+                    )
+                )
+            }
         }
-        return result
+    }.getOrElse {
+        Log.w(TAG, "parse failed: ${it.message}")
+        emptyList()
     }
 
-    private fun ensureHttps(url: String): String =
-        if (url.startsWith("//")) "https:$url" else url
+    private fun https(url: String) = if (url.startsWith("//")) "https:$url" else url
 }

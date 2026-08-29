@@ -55,16 +55,25 @@ class WardrobeRepository(
 
     fun getSavedImages(): Flow<List<SavedImage>> = store.savedImagesFlow
 
-    suspend fun saveImage(image: SavedImage) {
+    /**
+     * Persists a saved look. Returns true when it was also backed up to the cloud
+     * backend (Storage + Firestore); false when only stored locally because the
+     * user is not signed in.
+     */
+    suspend fun saveImage(image: SavedImage): Boolean {
+        // Copy the generated image out of the volatile cache dir into persistent
+        // storage so the saved look survives OS cache eviction.
+        val persisted = image.copy(path = store.persistLookImage(image.path))
         // Upload local file to Storage if not already a URL
         val currentUid = uid
         val cloudPath = if (currentUid != null && storageRepo != null) {
-            storageRepo.uploadSavedImage(currentUid, image.id, image.path)
-                .getOrNull()?.takeIf { it.isNotEmpty() } ?: image.path
-        } else image.path
-        val saved = image.copy(path = cloudPath)
+            storageRepo.uploadSavedImage(currentUid, persisted.id, persisted.path)
+                .getOrNull()?.takeIf { it.isNotEmpty() } ?: persisted.path
+        } else persisted.path
+        val saved = persisted.copy(path = cloudPath)
         store.saveImage(saved)
         currentUid?.let { firestoreRepo?.saveSavedImage(it, saved) }
+        return currentUid != null
     }
 
     suspend fun deleteSavedImage(imageId: Long) {

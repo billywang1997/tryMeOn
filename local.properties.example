@@ -3,6 +3,20 @@
 
 sdk.dir=/path/to/Android/sdk
 
+# ---------------------------------------------------------------------------
+# API relay (functions/) — see functions/README.md
+#
+# Set this and the app routes every third-party call through Cloud Functions,
+# which holds the keys in Secret Manager. RELEASE BUILDS BLANK EVERY UPSTREAM
+# KEY BELOW when this is set, because anything in BuildConfig ships readable
+# inside the APK. Leave it empty to call the APIs directly with the keys below
+# (debug convenience only — never ship a release that way).
+RELAY_BASE_URL=
+
+# ---------------------------------------------------------------------------
+# Upstream keys. With RELAY_BASE_URL set these are used by debug builds only;
+# the real copies live in Secret Manager (`firebase functions:secrets:set`).
+
 # Claude API (https://console.anthropic.com)
 CLAUDE_API_KEY=
 
@@ -24,3 +38,19 @@ EBAY_AFFILIATE_CAMPAIGN_ID=
 
 # RapidAPI — shared across real-time-product-search, real-time-amazon-data, vinted3
 RAPID_API_KEY=
+
+# SerpAPI — free tier 100 searches/month, https://serpapi.com
+# Aggregates Google Shopping results (SHEIN, Zara, H&M, ASOS, etc.)
+SERP_API_KEY=
+
+# ScraperAPI — free 1000 credits/month, https://www.scraperapi.com
+# Used as Amazon search via structured/amazon/search endpoint (~5-10 credits per call)
+SCRAPER_API_KEY=
+
+# Skimlinks affiliate publisher ID — wraps any retailer URL (Zara/SHEIN/ASOS/etc).
+# Register at https://skimlinks.com (publisher account). ~25,000 merchants.
+SKIMLINKS_ID=
+
+# Sovrn Commerce (ex-VigLink) site ID — competitor to Skimlinks for A/B comparison.
+# Register at https://www.sovrn.com/commerce
+SOVRN_SITE_ID=

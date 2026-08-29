@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,10 +28,24 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.data.BasicWardrobeProvider
-import com.example.myapplication.ui.components.FashionImage
+import com.example.myapplication.data.remote.EbayApiService
+import com.example.myapplication.data.remote.SerpApiService
+import com.example.myapplication.data.repository.MarketRepository
+import com.example.myapplication.data.repository.OutfitLogRepository
+import com.example.myapplication.data.repository.UserProfileRepository
 import com.example.myapplication.data.repository.WardrobeRepository
+import com.example.myapplication.data.repository.WishlistRepository
 import com.example.myapplication.domain.model.ClothingCategory
 import com.example.myapplication.domain.model.ClothingItem
+import com.example.myapplication.domain.model.OutfitLog
+import com.example.myapplication.domain.model.UserProfile
+import com.example.myapplication.ui.components.CompleteTheLookSheet
+import com.example.myapplication.ui.components.DailySurpriseCard
+import com.example.myapplication.ui.components.DailySurpriseEngine
+import com.example.myapplication.ui.components.FashionImage
+import com.example.myapplication.ui.components.ShakeOutfitSheet
+import com.example.myapplication.ui.components.rememberShakeDetector
+import com.example.myapplication.ui.components.rollRandomOutfit
 import com.example.myapplication.ui.theme.Ash
 import com.example.myapplication.ui.theme.Ink
 import com.example.myapplication.ui.theme.InkLight
@@ -46,12 +61,18 @@ fun WardrobeScreen(
     contentPadding: PaddingValues,
     claudeApiService: com.example.myapplication.data.remote.ClaudeApiService? = null,
     apiKey: String = "",
-    onNavigateToAnalysis: () -> Unit = {},
-    onNavigateToSwipe: () -> Unit = {},
-    onNavigateToCapsule: () -> Unit = {},
-    onNavigateToDna: () -> Unit = {},
+    logRepository: OutfitLogRepository? = null,
+    profileRepository: UserProfileRepository? = null,
+    wishlistRepository: WishlistRepository? = null,
+    marketRepository: MarketRepository? = null,
+    ebayClientId: String = "",
+    ebayClientSecret: String = "",
+    serpApiKey: String = "",
+    ebayAffiliateCampaignId: String = "",
     onNavigateToCost: () -> Unit = {},
-    onNavigateToStyleExplorer: () -> Unit = {}
+    onNavigateToAudit: () -> Unit = {},
+    onNavigateToWishlist: () -> Unit = {},
+    onNavigateToStreak: () -> Unit = {}
 ) {
     val vm: WardrobeViewModel = viewModel(factory = object : androidx.lifecycle.ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
@@ -61,11 +82,42 @@ fun WardrobeScreen(
 
     val allClothing by vm.allClothing.collectAsState()
     val selectedCategory by vm.selectedCategory.collectAsState()
+    val logs by (logRepository?.getLogs() ?: kotlinx.coroutines.flow.flowOf(emptyList<OutfitLog>())).collectAsState(emptyList())
+    val profile by (profileRepository?.getProfile() ?: kotlinx.coroutines.flow.flowOf<UserProfile?>(null)).collectAsState(null)
 
     val filtered = selectedCategory?.let { cat -> allClothing.filter { it.category == cat } } ?: allClothing
     val basicFiltered = selectedCategory?.let { BasicWardrobeProvider.byCategory(it) } ?: BasicWardrobeProvider.items
 
     var showBatchAdd by remember { mutableStateOf(false) }
+    var completeLookItem by remember { mutableStateOf<ClothingItem?>(null) }
+    var sellItem by remember { mutableStateOf<ClothingItem?>(null) }
+    var shakeOutfit by remember { mutableStateOf<List<ClothingItem>?>(null) }
+    val scope = rememberCoroutineScope()
+
+    // Lightweight weather fetch so the Daily Surprise can offer a weather-based pick.
+    var weather by remember { mutableStateOf<com.example.myapplication.data.remote.WeatherInfo?>(null) }
+    LaunchedEffect(Unit) {
+        val city = com.example.myapplication.data.remote.WeatherService.detectCity()
+        if (city.isNotBlank()) weather = com.example.myapplication.data.remote.WeatherService.fetch(city)
+    }
+
+    val surpriseCard = remember(allClothing, logs, weather) {
+        DailySurpriseEngine.pick(
+            items = allClothing,
+            logs = logs,
+            weatherTempC = weather?.tempC,
+            weatherCondition = weather?.descriptionZh
+        )
+    }
+
+    val ebayService = remember { EbayApiService() }
+    val serpService = remember { SerpApiService() }
+
+    rememberShakeDetector {
+        if (allClothing.size >= 2 && shakeOutfit == null && completeLookItem == null) {
+            shakeOutfit = rollRandomOutfit(allClothing)
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -89,28 +141,43 @@ fun WardrobeScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("${allClothing.size} ITEMS", style = MaterialTheme.typography.labelMedium, color = Ash)
                     Spacer(Modifier.width(4.dp))
-                    IconButton(onClick = onNavigateToSwipe, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Shuffle, null, tint = Ash, modifier = Modifier.size(18.dp))
-                    }
-                    IconButton(onClick = onNavigateToAnalysis, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Analytics, null, tint = Ash, modifier = Modifier.size(18.dp))
+                    if (allClothing.size >= 2) {
+                        IconButton(
+                            onClick = { shakeOutfit = rollRandomOutfit(allClothing) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Text("🎲", style = MaterialTheme.typography.bodyMedium)
+                        }
                     }
                 }
             }
 
             HorizontalDivider(color = Mist)
 
+            // Daily Surprise hero
+            DailySurpriseCard(
+                card = surpriseCard,
+                onClick = {
+                    when (val c = surpriseCard) {
+                        is com.example.myapplication.ui.components.SurpriseCard.ForgottenGem -> completeLookItem = c.item
+                        is com.example.myapplication.ui.components.SurpriseCard.MostWornThisMonth -> completeLookItem = c.item
+                        is com.example.myapplication.ui.components.SurpriseCard.WeatherPick -> completeLookItem = c.item
+                        is com.example.myapplication.ui.components.SurpriseCard.OnThisDay -> onNavigateToStreak()
+                        is com.example.myapplication.ui.components.SurpriseCard.Streak -> onNavigateToStreak()
+                        com.example.myapplication.ui.components.SurpriseCard.Empty -> showBatchAdd = true
+                    }
+                }
+            )
+
             // Feature strip
             androidx.compose.foundation.lazy.LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                item { FeatureChip("🃏 Style Builder", onNavigateToSwipe) }
-                item { FeatureChip("📊 Analysis", onNavigateToAnalysis) }
-                item { FeatureChip("💊 Capsule", onNavigateToCapsule) }
-                item { FeatureChip("🧬 Style DNA", onNavigateToDna) }
+                item { FeatureChip("✨ AI Audit", onNavigateToAudit) }
+                item { FeatureChip("🤍 Wishlist", onNavigateToWishlist) }
+                item { FeatureChip("🔥 Streaks", onNavigateToStreak) }
                 item { FeatureChip("💰 Cost Tracker", onNavigateToCost) }
-                item { FeatureChip("🎨 Style Explorer", onNavigateToStyleExplorer) }
             }
 
             HorizontalDivider(color = Mist)
@@ -159,7 +226,9 @@ fun WardrobeScreen(
                             item = item,
                             onDelete = { vm.deleteClothing(item) },
                             onUpdateCategory = { cat -> vm.updateCategory(item, cat) },
-                            onToggleFavorite = { vm.toggleFavorite(item) }
+                            onToggleFavorite = { vm.toggleFavorite(item) },
+                            onClick = { completeLookItem = item },
+                            onSell = if (marketRepository != null) { { sellItem = item } } else null
                         )
                     }
                 }
@@ -167,7 +236,7 @@ fun WardrobeScreen(
                     BasicsHeader()
                 }
                 items(basicFiltered, key = { "basic_${it.id}" }) { item ->
-                    ClothingCard(item = item, onDelete = null, isBasic = true)
+                    ClothingCard(item = item, onDelete = null, isBasic = true, onClick = { completeLookItem = item })
                 }
             }
         }
@@ -203,6 +272,51 @@ fun WardrobeScreen(
                 onDone = { showBatchAdd = false },
                 onSkip = { showBatchAdd = false }
             )
+        }
+    }
+
+    completeLookItem?.let { anchor ->
+        if (claudeApiService != null && apiKey.isNotBlank()) {
+            CompleteTheLookSheet(
+                anchorItem = anchor,
+                wardrobe = allClothing,
+                gender = profile?.gender.orEmpty(),
+                apiKey = apiKey,
+                claudeService = claudeApiService,
+                ebayService = ebayService,
+                ebayClientId = ebayClientId,
+                ebayClientSecret = ebayClientSecret,
+                serpService = serpService,
+                serpApiKey = serpApiKey,
+                ebayAffiliateCampaignId = ebayAffiliateCampaignId,
+                wishlistRepository = wishlistRepository,
+                outfitLogs = logs,
+                onDismiss = { completeLookItem = null }
+            )
+        } else {
+            completeLookItem = null
+        }
+    }
+
+    shakeOutfit?.let { roll ->
+        ShakeOutfitSheet(
+            initial = roll,
+            wardrobe = allClothing,
+            onLogOutfit = { log -> logRepository?.save(log) },
+            onDismiss = { shakeOutfit = null }
+        )
+    }
+
+    sellItem?.let { item ->
+        if (marketRepository != null) {
+            com.example.myapplication.ui.components.SellItemDialog(
+                item = item,
+                repository = marketRepository,
+                onDismiss = { sellItem = null },
+                onPosted = { sellItem = null }
+            )
+        } else {
+            sellItem = null
         }
     }
 }
@@ -265,7 +379,9 @@ fun ClothingCard(
     onDelete: (() -> Unit)?,
     isBasic: Boolean = false,
     onUpdateCategory: ((ClothingCategory) -> Unit)? = null,
-    onToggleFavorite: (() -> Unit)? = null
+    onToggleFavorite: (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
+    onSell: (() -> Unit)? = null
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showCategoryPicker by remember { mutableStateOf(false) }
@@ -275,6 +391,7 @@ fun ClothingCard(
             .aspectRatio(0.75f)
             .clip(RoundedCornerShape(8.dp))
             .background(Paper)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
     ) {
         FashionImage(
             model = item.imagePath,
@@ -312,16 +429,30 @@ fun ClothingCard(
             }
         }
         if (onDelete != null) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(6.dp)
-                    .size(24.dp)
-                    .background(Color.White.copy(alpha = 0.85f), RoundedCornerShape(4.dp))
-                    .clickable { showDeleteConfirm = true },
-                contentAlignment = Alignment.Center
+            Row(
+                modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Icon(Icons.Default.Delete, null, modifier = Modifier.size(13.dp), tint = Ash)
+                if (onSell != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .background(Color.White.copy(alpha = 0.85f), RoundedCornerShape(4.dp))
+                            .clickable { onSell() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Sell, "Sell", modifier = Modifier.size(13.dp), tint = Ash)
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .background(Color.White.copy(alpha = 0.85f), RoundedCornerShape(4.dp))
+                        .clickable { showDeleteConfirm = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Delete, null, modifier = Modifier.size(13.dp), tint = Ash)
+                }
             }
         }
         // Bottom label — tappable to edit category if onUpdateCategory provided

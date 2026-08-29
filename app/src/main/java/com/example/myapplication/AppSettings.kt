@@ -34,6 +34,26 @@ class AppSettings(context: Context) {
         get() = prefs.getString("rapid_api_key", RAPID_API_KEY)?.takeIf { it.isNotBlank() } ?: RAPID_API_KEY
         set(value) = prefs.edit { putString("rapid_api_key", value) }
 
+    // SerpAPI — free 100/mo Google Shopping aggregator
+    var serpApiKey: String
+        get() = prefs.getString("serp_api_key", SERP_API_KEY)?.takeIf { it.isNotBlank() } ?: SERP_API_KEY
+        set(value) = prefs.edit { putString("serp_api_key", value) }
+
+    // ScraperAPI — free 1000 credits/mo, Amazon structured search
+    var scraperApiKey: String
+        get() = prefs.getString("scraper_api_key", SCRAPER_API_KEY)?.takeIf { it.isNotBlank() } ?: SCRAPER_API_KEY
+        set(value) = prefs.edit { putString("scraper_api_key", value) }
+
+    // Skimlinks publisher ID — auto-affiliates any retailer URL
+    var skimlinksId: String
+        get() = prefs.getString("skimlinks_id", SKIMLINKS_ID)?.takeIf { it.isNotBlank() } ?: SKIMLINKS_ID
+        set(value) = prefs.edit { putString("skimlinks_id", value) }
+
+    // Sovrn Commerce site ID — Skimlinks alternative for A/B comparison
+    var sovrnSiteId: String
+        get() = prefs.getString("sovrn_site_id", SOVRN_SITE_ID)?.takeIf { it.isNotBlank() } ?: SOVRN_SITE_ID
+        set(value) = prefs.edit { putString("sovrn_site_id", value) }
+
     var unsplashAccessKey: String
         get() = prefs.getString("unsplash_access_key", UNSPLASH_KEY) ?: UNSPLASH_KEY
         set(value) = prefs.edit { putString("unsplash_access_key", value) }
@@ -64,6 +84,40 @@ class AppSettings(context: Context) {
         get() = prefs.getString("google_search_engine_id", GOOGLE_SEARCH_CX) ?: GOOGLE_SEARCH_CX
         set(value) = prefs.edit { putString("google_search_engine_id", value) }
 
+    // Last CNY→AUD rate we actually saw, so a landed-cost quote made offline
+    // falls back to a real rate rather than to the compiled-in constant.
+    var cnyToAudRate: Float
+        get() = prefs.getFloat("cny_to_aud_rate", 0f)
+        set(value) = prefs.edit { putFloat("cny_to_aud_rate", value) }
+
+    var cnyToAudFetchedAt: Long
+        get() = prefs.getLong("cny_to_aud_fetched_at", 0L)
+        set(value) = prefs.edit { putLong("cny_to_aud_fetched_at", value) }
+
+    var cnyToAudSource: String
+        get() = prefs.getString("cny_to_aud_source", "") ?: ""
+        set(value) = prefs.edit { putString("cny_to_aud_source", value) }
+
+    // Purchase token whose server-side entitlement has already been granted.
+    // Stops restorePurchases() from re-calling verifyPurchase on every launch.
+    var entitlementSyncedFor: String
+        get() = prefs.getString("entitlement_synced_for", "") ?: ""
+        set(value) = prefs.edit { putString("entitlement_synced_for", value) }
+
+    // Premium one-shot unlock for Closet Audit. Once true, audit screen skips paywall.
+    var auditUnlocked: Boolean
+        get() = prefs.getBoolean("audit_unlocked", false)
+        set(value) = prefs.edit { putBoolean("audit_unlocked", value) }
+
+    // Notification preferences (defaults: ON)
+    var notifyPriceDrops: Boolean
+        get() = prefs.getBoolean("notify_price_drops", true)
+        set(value) = prefs.edit { putBoolean("notify_price_drops", value) }
+
+    var notifyStreakReminder: Boolean
+        get() = prefs.getBoolean("notify_streak_reminder", true)
+        set(value) = prefs.edit { putBoolean("notify_streak_reminder", value) }
+
     var onboardingComplete: Boolean
         get() = prefs.getBoolean("onboarding_complete", false)
         set(value) = prefs.edit { putBoolean("onboarding_complete", value) }
@@ -84,5 +138,9 @@ class AppSettings(context: Context) {
         private val EBAY_CLIENT_SECRET = BuildConfig.EBAY_CLIENT_SECRET
         private val EBAY_AFFILIATE_CAMPAIGN_ID = BuildConfig.EBAY_AFFILIATE_CAMPAIGN_ID
         private val RAPID_API_KEY = BuildConfig.RAPID_API_KEY
+        private val SERP_API_KEY = BuildConfig.SERP_API_KEY
+        private val SCRAPER_API_KEY = BuildConfig.SCRAPER_API_KEY
+        private val SKIMLINKS_ID = BuildConfig.SKIMLINKS_ID
+        private val SOVRN_SITE_ID = BuildConfig.SOVRN_SITE_ID
     }
 }

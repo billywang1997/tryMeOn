@@ -47,10 +47,12 @@ private data class EbayItemSummary(
 private data class EbayPrice(val value: String = "", val currency: String = "AUD")
 private data class EbayImage(val imageUrl: String = "")
 
+private const val RELAY_TOKEN_PLACEHOLDER = "via-relay"
+
 class EbayApiService {
 
     private val gson = Gson()
-    private val client = OkHttpClient.Builder()
+    private val client = RelayHttp.builder()
         .addInterceptor(HttpLoggingInterceptor { Log.d(TAG, it) }.apply {
             level = HttpLoggingInterceptor.Level.BASIC
         })
@@ -63,6 +65,11 @@ class EbayApiService {
 
     private suspend fun getToken(clientId: String, clientSecret: String): String? =
         withContext(Dispatchers.IO) {
+            // Behind the relay the OAuth exchange happens server-side and
+            // /identity/** is not even in the allowlist, so there is no token to
+            // fetch here — the relay overwrites this placeholder with a real one.
+            if (RelayHttp.enabled) return@withContext RELAY_TOKEN_PLACEHOLDER
+
             if (cachedToken.isNotEmpty() && System.currentTimeMillis() < tokenExpiresAt) {
                 return@withContext cachedToken
             }
@@ -97,7 +104,7 @@ class EbayApiService {
         query: String,
         limit: Int = 20
     ): Result<List<EbayItem>> = withContext(Dispatchers.IO) {
-        if (clientId.isBlank() || clientSecret.isBlank()) {
+        if (!RelayHttp.enabled && (clientId.isBlank() || clientSecret.isBlank())) {
             return@withContext Result.failure(Exception("Please add your eBay API credentials in settings"))
         }
         try {

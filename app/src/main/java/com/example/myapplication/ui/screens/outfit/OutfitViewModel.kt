@@ -3,12 +3,12 @@ package com.example.myapplication.ui.screens.outfit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.BasicWardrobeProvider
-import com.example.myapplication.data.remote.AmazonRealTimeApiService
+import com.example.myapplication.data.remote.ScraperApiService
 import com.example.myapplication.data.remote.AsosApiService
 import com.example.myapplication.data.remote.ClaudeApiService
 import com.example.myapplication.data.remote.EbayApiService
 import com.example.myapplication.data.remote.EbayItem
-import com.example.myapplication.data.remote.RealTimeProductSearchService
+import com.example.myapplication.data.remote.SerpApiService
 import com.example.myapplication.data.remote.WeatherInfo
 import com.example.myapplication.data.remote.WeatherService
 import com.example.myapplication.data.repository.WardrobeRepository
@@ -64,6 +64,7 @@ data class OutfitUiState(
     val outfitImagePath: String? = null,
     val imageLoading: Boolean = false,
     val imageSaved: Boolean = false,
+    val promptSignInToBackup: Boolean = false,
     val closetOnly: Boolean = false,
     val outfitItems: List<ClothingItem> = emptyList(),
     val essentialsHints: List<String> = emptyList(),
@@ -83,11 +84,13 @@ class OutfitViewModel(
     private val apiKey: String,
     private val ebayService: EbayApiService? = null,
     private val asosService: AsosApiService? = null,
-    private val amazonService: AmazonRealTimeApiService? = null,
+    private val amazonService: ScraperApiService? = null,
     private val ebayClientId: String = "",
     private val ebayClientSecret: String = "",
     private val rapidApiKey: String = "",
-    private val rtpsService: RealTimeProductSearchService? = null
+    private val serpService: SerpApiService? = null,
+    private val scraperApiKey: String = "",
+    private val serpApiKey: String = ""
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(OutfitUiState())
@@ -156,7 +159,7 @@ class OutfitViewModel(
         val weatherCtx = state.weather?.let { "${it.tempC}°C, ${it.descriptionZh}, humidity ${it.humidity}%" } ?: ""
         val moodCtx = state.mood?.let { "User's mood today: ${it.emoji} ${it.label}. Suggest an outfit that reflects or enhances this mood." } ?: ""
 
-        _uiState.value = state.copy(isLoading = true, error = "", suggestion = "", outfitImagePath = null, imageSaved = false, essentialsHints = emptyList(), outfitItems = clothesToUse)
+        _uiState.value = state.copy(isLoading = true, error = "", suggestion = "", outfitImagePath = null, imageSaved = false, promptSignInToBackup = false, essentialsHints = emptyList(), outfitItems = clothesToUse)
         viewModelScope.launch {
             try {
                 val result = claudeService.generateOutfitSuggestion(
@@ -197,13 +200,13 @@ class OutfitViewModel(
         val items = if (state.wardrobe.isEmpty()) BasicWardrobeProvider.items else state.wardrobe
         val idList = items.take(12).joinToString(",") { it.id.toString() }
         viewModelScope.launch {
-            wardrobeRepository.saveImage(
+            val backedUp = wardrobeRepository.saveImage(
                 SavedImage(
                     path = path, type = "look", label = state.selectedScene.label,
                     note = """{"d":"$date","s":"${state.selectedScene.label}","ids":[$idList]}"""
                 )
             )
-            _uiState.value = _uiState.value.copy(imageSaved = true)
+            _uiState.value = _uiState.value.copy(imageSaved = true, promptSignInToBackup = !backedUp)
         }
     }
 
@@ -308,12 +311,16 @@ class OutfitViewModel(
     private suspend fun searchOnline(query: String): List<EbayItem> {
         val ebayD   = viewModelScope.async { ebayService?.search(ebayClientId, ebayClientSecret, query, limit = 6) }
         val asosD   = viewModelScope.async { asosService?.search(rapidApiKey, query, limit = 5) }
-        val amazonD = viewModelScope.async { amazonService?.search(rapidApiKey, query, limit = 5) }
-        val rtpsD   = viewModelScope.async { rtpsService?.search(rapidApiKey, query, limit = 5) }
-        return (ebayD.await()?.getOrNull() ?: emptyList()) +
-               (asosD.await()?.getOrNull() ?: emptyList()) +
-               (amazonD.await()?.getOrNull() ?: emptyList()) +
-               (rtpsD.await() ?: emptyList())
+        val amazonD = viewModelScope.async { amazonService?.search(scraperApiKey, query, limit = 5) }
+        val serpD   = viewModelScope.async { serpService?.search(serpApiKey, query, limit = 8) }
+        // Affiliate.wrap skips eBay/Amazon sources (those use their own partner programs).
+        fun wrap(items: List<EbayItem>) = items.map {
+            it.copy(itemWebUrl = com.example.myapplication.util.Affiliate.wrap(it.itemWebUrl, it.source))
+        }
+        return wrap(ebayD.await()?.getOrNull() ?: emptyList()) +
+               wrap(asosD.await()?.getOrNull() ?: emptyList()) +
+               wrap(amazonD.await()?.getOrNull() ?: emptyList()) +
+               wrap(serpD.await()?.getOrNull() ?: emptyList())
     }
 
     private fun matchesQuery(item: ClothingItem, suggestion: String): Boolean {

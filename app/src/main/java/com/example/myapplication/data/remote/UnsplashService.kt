@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap
 object UnsplashService {
     private var accessKey: String = ""
     private val cache = ConcurrentHashMap<String, String>()
-    private val client = OkHttpClient()
+    private val client = RelayHttp.builder().build()
 
     fun init(key: String) { accessKey = key }
 

@@ -68,10 +68,8 @@ class ProfileViewModel(
 
     fun saveProfile() {
         viewModelScope.launch {
+            // UserProfileRepository handles photo upload + Firestore sync internally.
             profileRepository.saveProfile(_profile.value)
-            currentUser.value?.uid?.let { uid ->
-                firestoreRepository.saveProfile(uid, _profile.value)
-            }
             _saved.value = true
         }
     }
@@ -82,17 +80,11 @@ class ProfileViewModel(
     fun savePhoto(context: Context, uri: Uri, isFace: Boolean) {
         viewModelScope.launch {
             val localPath = saveImageToInternal(context, uri, if (isFace) "face" else "body") ?: return@launch
-            val uid = currentUser.value?.uid
-            val displayPath = if (uid != null) {
-                val type = if (isFace) "face" else "body"
-                storageRepository.uploadProfilePhoto(uid, type, localPath)
-                    .getOrNull()?.takeIf { it.isNotEmpty() } ?: localPath
-            } else localPath
-            val updated = if (isFace) _profile.value.copy(faceImagePath = displayPath)
-                         else _profile.value.copy(bodyImagePath = displayPath)
+            val updated = if (isFace) _profile.value.copy(faceImagePath = localPath)
+                         else _profile.value.copy(bodyImagePath = localPath)
             _profile.value = updated
+            // saveProfile uploads the local photo to Storage and syncs to Firestore.
             profileRepository.saveProfile(updated)
-            uid?.let { firestoreRepository.saveProfile(it, updated) }
         }
     }
 

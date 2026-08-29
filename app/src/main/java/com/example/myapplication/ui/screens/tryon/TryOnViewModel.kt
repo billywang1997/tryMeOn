@@ -6,12 +6,12 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.BasicWardrobeProvider
-import com.example.myapplication.data.remote.AmazonRealTimeApiService
+import com.example.myapplication.data.remote.ScraperApiService
 import com.example.myapplication.data.remote.ClaudeApiService
 import com.example.myapplication.data.remote.EbayApiService
 import com.example.myapplication.data.remote.EbayItem
-import com.example.myapplication.data.remote.RealTimeProductSearchService
 import com.example.myapplication.data.remote.ReplicateApiService
+import com.example.myapplication.data.remote.SerpApiService
 import com.example.myapplication.data.remote.VintedApiService
 import com.example.myapplication.data.remote.UnsplashService
 import com.example.myapplication.data.repository.UserProfileRepository
@@ -30,8 +30,8 @@ import java.io.File
 import java.io.FileOutputStream
 
 private fun normalizeGender(raw: String): String = when (raw.trim().lowercase()) {
-    "male", "男", "m" -> "Male"
-    "female", "女", "f" -> "Female"
+    "male", "m" -> "Male"
+    "female", "f" -> "Female"
     else -> raw
 }
 
@@ -94,6 +94,7 @@ data class TryOnUiState(
     val loadingStep: String = "",
     val error: String = "",
     val imageSaved: Boolean = false,
+    val promptSignInToBackup: Boolean = false,
     val inferredGender: String = "",
     val inferringGender: Boolean = false,
     val favoriteEssentialIds: Set<Long> = emptySet(),
@@ -106,6 +107,21 @@ data class TryOnUiState(
         else normalizeGender(inferredGender)
     }
     val resultImageUrl: String get() = resultViews.firstOrNull() ?: ""
+
+    /** Garment credits printed on the share card, in a stable slot order. */
+    val shareCredits: List<com.example.myapplication.share.ShareCardRenderer.Credit>
+        get() = ClothingCategory.entries.mapNotNull { category ->
+            val garment = selectedGarments[category.name] ?: return@mapNotNull null
+            com.example.myapplication.share.ShareCardRenderer.Credit(
+                slot = category.label,
+                label = garment.displayLabel,
+                source = when (garment.source) {
+                    GarmentTab.WARDROBE   -> "Closet"
+                    GarmentTab.ESSENTIALS -> "Essential"
+                    GarmentTab.EBAY       -> "Secondhand"
+                }
+            )
+        }
     val selectedClothingIds: Set<Long> get() = selectedGarments.values.mapNotNull { it.clothingItem?.id }.toSet()
     val selectedEbayIds: Set<String> get() = selectedGarments.values.mapNotNull { it.ebayItem?.itemId }.toSet()
 }
@@ -120,19 +136,25 @@ class TryOnViewModel(
     private val ebayService: EbayApiService? = null,
     private val ebayClientId: String = "",
     private val ebayClientSecret: String = "",
-    private val amazonService: AmazonRealTimeApiService? = null,
+    private val amazonService: ScraperApiService? = null,
     private val rapidApiKey: String = "",
     private val vintedService: VintedApiService? = null,
-    private val rtpsService: RealTimeProductSearchService? = null,
     private val ebayAffiliateCampaignId: String = "",
     private val amazonAssociateTag: String = "",
-    private val styleKeywords: Set<String> = emptySet()
+    private val styleKeywords: Set<String> = emptySet(),
+    private val scraperApiKey: String = "",
+    private val serpService: SerpApiService? = null,
+    private val serpApiKey: String = ""
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TryOnUiState())
     val uiState: StateFlow<TryOnUiState> = _uiState.asStateFlow()
 
     init {
+        // A garment picked in the sourcing tab is why the user came here.
+        com.example.myapplication.data.sourcing.PendingTryOn.consume()?.let {
+            selectExternalGarment(it.item, it.category)
+        }
         viewModelScope.launch {
             wardrobeRepository.getAllClothing().collect { clothes ->
                 _uiState.value = _uiState.value.copy(wardrobe = clothes)
@@ -203,6 +225,29 @@ class TryOnViewModel(
     // Keep old name for Wardrobe tab backward compat
     fun toggleItem(item: ClothingItem) = toggleClothingItem(item, GarmentTab.WARDROBE)
 
+    /**
+     * Preselect a garment chosen on another screen.
+     *
+     * Takes the category directly rather than a display name: the sourcing flow
+     * already had the model classify the item, and re-deriving it from a Chinese
+     * listing title would only lose that.
+     */
+    fun selectExternalGarment(item: EbayItem, category: ClothingCategory) {
+        val current = _uiState.value.selectedGarments.toMutableMap()
+        current[category.name] = SelectedGarment(
+            slotKey = category.name,
+            source = GarmentTab.EBAY,
+            ebayItem = item,
+            ebayCategory = category.label
+        )
+        _uiState.value = _uiState.value.copy(
+            selectedGarments = current,
+            garmentTab = GarmentTab.EBAY,
+            resultViews = emptyList(),
+            error = ""
+        )
+    }
+
     fun toggleEbayItem(item: EbayItem, categoryName: String) {
         val slot = ebayNameToSlot(categoryName)
         val current = _uiState.value.selectedGarments.toMutableMap()
@@ -248,18 +293,20 @@ class TryOnViewModel(
             val rawQuery = listOf(item.color, item.name.ifEmpty { item.category.label }).filter { it.isNotBlank() }.joinToString(" ")
             val query = ensureGenderInQuery(rawQuery)
             Log.d("TryOnVM", "shopSimilar: rawQuery='$rawQuery' → finalQuery='$query' effectiveGender=${_uiState.value.effectiveGender} profileGender=${_uiState.value.profile?.gender}")
-            // Fixed quota: RTPS(20) → eBay(6) → Amazon(6) → Vinted(6)
-            val rtpsDeferred   = async { rtpsService?.search(rapidApiKey, query, limit = 20) }
+            // Fixed quota: Web/Serp(22) → eBay(6) → Amazon(6) → Vinted(6)
+            val serpDeferred   = async { serpService?.search(serpApiKey, query, limit = 22) }
             val ebayDeferred   = async { ebayService?.search(ebayClientId, ebayClientSecret, query, limit = 6) }
-            val amazonDeferred = async { amazonService?.search(rapidApiKey, query, limit = 6) }
+            val amazonDeferred = async { amazonService?.search(scraperApiKey, query, limit = 6) }
             val vintedDeferred = async { vintedService?.search(rapidApiKey, query) }
             val combined = filterByGender(
-                (rtpsDeferred.await() ?: emptyList()).take(20) +
+                (serpDeferred.await()?.getOrNull() ?: emptyList()).take(22)
+                    .map { applyAggregatorAffiliate(it) } +
                 (ebayDeferred.await()?.getOrNull() ?: emptyList()).take(6)
                     .map { applyEbayAffiliate(it) } +
                 (amazonDeferred.await()?.getOrNull() ?: emptyList()).take(6)
                     .map { applyAmazonAffiliate(it) } +
                 (vintedDeferred.await()?.getOrNull()?.map { it.toEbayItem() } ?: emptyList()).take(6)
+                    .map { applyAggregatorAffiliate(it) }
             )
             _uiState.value = _uiState.value.copy(
                 shopSimilarLoading = false,
@@ -320,18 +367,20 @@ class TryOnViewModel(
         updateEbayCategory(index) { it.copy(loading = true) }
         val query = ensureGenderInQuery(rawQuery)
         Log.d("TryOnVM", "fetchCategory[$index]: rawQuery='$rawQuery' → finalQuery='$query' effectiveGender=${_uiState.value.effectiveGender}")
-        // Fixed quota: RTPS(20) → eBay(6) → Amazon(6) → Vinted(6)
-        val rtpsDeferred   = viewModelScope.async { rtpsService?.search(rapidApiKey, query, limit = 20) }
+        // Fixed quota: Web/Serp(22) → eBay(6) → Amazon(6) → Vinted(6)
+        val serpDeferred   = viewModelScope.async { serpService?.search(serpApiKey, query, limit = 22) }
         val ebayDeferred   = viewModelScope.async { ebayService?.search(ebayClientId, ebayClientSecret, query, limit = 6) }
-        val amazonDeferred = viewModelScope.async { amazonService?.search(rapidApiKey, query, limit = 6) }
+        val amazonDeferred = viewModelScope.async { amazonService?.search(scraperApiKey, query, limit = 6) }
         val vintedDeferred = viewModelScope.async { vintedService?.search(rapidApiKey, query) }
         val combined = filterByGender(
-            (rtpsDeferred.await() ?: emptyList()).take(20) +
+            (serpDeferred.await()?.getOrNull() ?: emptyList()).take(22)
+                .map { applyAggregatorAffiliate(it) } +
             (ebayDeferred.await()?.getOrNull() ?: emptyList()).take(6)
                 .map { applyEbayAffiliate(it) } +
             (amazonDeferred.await()?.getOrNull() ?: emptyList()).take(6)
                 .map { applyAmazonAffiliate(it) } +
             (vintedDeferred.await()?.getOrNull()?.map { it.toEbayItem() } ?: emptyList()).take(6)
+                .map { applyAggregatorAffiliate(it) }
         )
         updateEbayCategory(index) { it.copy(loading = false, items = combined) }
     }
@@ -558,8 +607,8 @@ class TryOnViewModel(
         }
         val note = "$date · ${garmentParts.joinToString(", ")}"
         viewModelScope.launch {
-            wardrobeRepository.saveImage(SavedImage(path = path, type = "tryon", label = "Try-On", note = note))
-            _uiState.value = _uiState.value.copy(imageSaved = true)
+            val backedUp = wardrobeRepository.saveImage(SavedImage(path = path, type = "tryon", label = "Try-On", note = note))
+            _uiState.value = _uiState.value.copy(imageSaved = true, promptSignInToBackup = !backedUp)
         }
     }
 
@@ -573,6 +622,12 @@ class TryOnViewModel(
         return item.copy(
             itemWebUrl = "${item.itemWebUrl}${sep}mkevt=1&mkcid=1&mkrid=705-53470-19255-0&campid=$ebayAffiliateCampaignId&toolid=10001"
         )
+    }
+
+    /** Skimlinks/Sovrn wrap for non-eBay/non-Amazon retailer URLs. No-op for blank URLs. */
+    private fun applyAggregatorAffiliate(item: EbayItem): EbayItem {
+        if (item.itemWebUrl.isBlank()) return item
+        return item.copy(itemWebUrl = com.example.myapplication.util.Affiliate.wrap(item.itemWebUrl, item.source))
     }
 
     private fun applyAmazonAffiliate(item: EbayItem): EbayItem {
@@ -592,28 +647,12 @@ class TryOnViewModel(
     }
 
     private fun ensureGenderInQuery(query: String): String {
-        // Resolve gender: profile → inferred → local heuristic → give up
         val gender = when {
             _uiState.value.effectiveGender == "Male" || _uiState.value.effectiveGender == "Female" ->
                 _uiState.value.effectiveGender
             else -> inferGenderLocally(_uiState.value.wardrobe)
         }
-        val genderWord = when (gender) {
-            "Female" -> "woman"
-            "Male"   -> "man"
-            else     -> return query   // truly unknown — leave as-is
-        }
-        // Strip any existing gender markers, then prepend the correct word.
-        val cleaned = query
-            .replace(Regex("\\bwomen'?s?\\b", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("\\bmen'?s?\\b", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("\\bwoman\\b", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("\\bman\\b", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("\\bfemale\\b", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("\\bmale\\b", RegexOption.IGNORE_CASE), "")
-            .trim()
-            .replace(Regex("\\s{2,}"), " ")
-        return "$genderWord $cleaned"
+        return com.example.myapplication.util.ensureGenderInQuery(query, gender)
     }
 
     private fun parseEbayCategories(text: String): List<EbayTryOnCategory> {

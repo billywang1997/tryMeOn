@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Rotate90DegreesCw
 import androidx.compose.material3.*
@@ -40,18 +41,20 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.example.myapplication.data.BasicWardrobeProvider
-import com.example.myapplication.data.remote.AmazonRealTimeApiService
+import com.example.myapplication.data.remote.ScraperApiService
 import com.example.myapplication.data.remote.ClaudeApiService
 import com.example.myapplication.data.remote.EbayApiService
 import com.example.myapplication.data.remote.EbayItem
-import com.example.myapplication.data.remote.RealTimeProductSearchService
 import com.example.myapplication.data.remote.ReplicateApiService
 import com.example.myapplication.data.remote.VintedApiService
 import com.example.myapplication.data.repository.UserProfileRepository
 import com.example.myapplication.data.repository.WardrobeRepository
 import com.example.myapplication.domain.model.ClothingCategory
 import com.example.myapplication.domain.model.ClothingItem
+import com.example.myapplication.share.LookCard
+import com.example.myapplication.share.ShareCardRenderer
 import com.example.myapplication.ui.components.FashionImage
+import androidx.compose.ui.text.style.TextAlign
 import com.example.myapplication.ui.theme.Ash
 import com.example.myapplication.ui.theme.Ink
 import com.example.myapplication.ui.theme.Mist
@@ -70,15 +73,17 @@ fun TryOnScreen(
     ebayClientId: String = "",
     ebayClientSecret: String = "",
     rapidApiKey: String = "",
+    scraperApiKey: String = "",
+    serpApiKey: String = "",
     ebayAffiliateCampaignId: String = "",
     amazonAssociateTag: String = "",
     styleKeywords: Set<String> = emptySet()
 ) {
     val replicateService = remember { ReplicateApiService() }
     val ebayService  = remember { EbayApiService() }
-    val amazonService = remember { AmazonRealTimeApiService() }
+    val amazonService = remember { ScraperApiService() }
     val vintedService = remember { VintedApiService() }
-    val rtpsService   = remember { RealTimeProductSearchService() }
+    val serpService   = remember { com.example.myapplication.data.remote.SerpApiService() }
     val vm: TryOnViewModel = viewModel(factory = object : androidx.lifecycle.ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
@@ -88,15 +93,27 @@ fun TryOnScreen(
                 apiKey, replicateApiKey,
                 ebayService, ebayClientId, ebayClientSecret,
                 amazonService = amazonService, rapidApiKey = rapidApiKey,
-                vintedService = vintedService, rtpsService = rtpsService,
+                vintedService = vintedService,
                 ebayAffiliateCampaignId = ebayAffiliateCampaignId,
                 amazonAssociateTag = amazonAssociateTag,
-                styleKeywords = styleKeywords
+                styleKeywords = styleKeywords,
+                scraperApiKey = scraperApiKey,
+                serpService = serpService,
+                serpApiKey = serpApiKey
             ) as T
     })
 
     val context = LocalContext.current
     val state by vm.uiState.collectAsState()
+
+    // The ViewModel picks this up in init, but only on first creation — coming
+    // back to an already-built tab would otherwise drop the garment silently.
+    LaunchedEffect(Unit) {
+        com.example.myapplication.data.sourcing.PendingTryOn.consume()?.let {
+            vm.selectExternalGarment(it.item, it.category)
+        }
+    }
+
     val allItems = if (state.wardrobe.isEmpty()) BasicWardrobeProvider.items else state.wardrobe
     val selectedIds = state.selectedClothingIds
 
@@ -284,7 +301,9 @@ fun TryOnScreen(
                 views = state.resultViews,
                 generatingViews = state.generatingViews,
                 analysis = state.analysis,
+                credits = state.shareCredits,
                 imageSaved = state.imageSaved,
+                promptSignInToBackup = state.promptSignInToBackup,
                 onSave = { path -> vm.saveImage(path) }
             )
         }
@@ -771,12 +790,17 @@ fun TryOnResult(
     views: List<String>,
     generatingViews: Boolean,
     analysis: String,
+    credits: List<ShareCardRenderer.Credit> = emptyList(),
     imageSaved: Boolean = false,
+    promptSignInToBackup: Boolean = false,
     onSave: ((String) -> Unit)? = null
 ) {
     val pagerState = rememberPagerState { views.size.coerceAtLeast(1) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var autoRotating by remember { mutableStateOf(false) }
+    var sharing by remember { mutableStateOf(false) }
+    var shareError by remember { mutableStateOf("") }
 
     // Auto-rotate: advance one page every 1.2 seconds, loop
     LaunchedEffect(autoRotating, views.size) {
@@ -910,6 +934,16 @@ fun TryOnResult(
                         color = Color(0xFF4CAF50)
                     )
                 }
+                if (promptSignInToBackup) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Sign in from the Profile tab to back up your looks to the cloud",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Ash,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                }
             } else {
                 val currentPath = views.getOrElse(pagerState.currentPage) { views.first() }
                 OutlinedButton(
@@ -921,6 +955,51 @@ fun TryOnResult(
                     Text("Save to My Looks", style = MaterialTheme.typography.labelLarge)
                 }
             }
+        }
+
+        // Sharing is the app's only free distribution channel, so it gets the
+        // filled button and every generated angle — a front/side pair on a
+        // branded card reads as a lookbook, a lone screenshot reads as nothing.
+        Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = {
+                scope.launch {
+                    sharing = true
+                    shareError = ""
+                    val shared = LookCard.share(
+                        context = context,
+                        paths = views,
+                        credits = credits,
+                        caption = "Styled with Wardrobe AI"
+                    )
+                    if (!shared) shareError = "Couldn't build the share card — try again"
+                    sharing = false
+                }
+            },
+            enabled = !sharing && views.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Ink)
+        ) {
+            if (sharing) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White
+                )
+            } else {
+                Icon(Icons.Default.IosShare, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (views.size > 1) "Share this look" else "Share",
+                    style = MaterialTheme.typography.labelLarge
+                )
+            }
+        }
+        if (shareError.isNotEmpty()) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                shareError, style = MaterialTheme.typography.labelSmall, color = Ash,
+                modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center
+            )
         }
 
         if (analysis.isNotEmpty()) {

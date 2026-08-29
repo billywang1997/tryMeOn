@@ -11,10 +11,12 @@ import com.example.myapplication.domain.model.ClothingItem
 import com.example.myapplication.domain.model.OutfitLog
 import com.example.myapplication.domain.model.SavedImage
 import com.example.myapplication.domain.model.UserProfile
+import com.example.myapplication.domain.model.WishlistItem
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.io.File
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "wardrobe_store")
 
@@ -28,6 +30,7 @@ class DataStoreManager(private val context: Context) {
         private val KEY_NEXT_ID      = stringPreferencesKey("next_id")
         private val KEY_OUTFIT_LOGS  = stringPreferencesKey("outfit_logs")
         private val KEY_SAVED_IMAGES = stringPreferencesKey("saved_images")
+        private val KEY_WISHLIST     = stringPreferencesKey("wishlist_items")
     }
 
     // --- Clothing ---
@@ -158,6 +161,62 @@ class DataStoreManager(private val context: Context) {
                 gson.fromJson(prefs[KEY_SAVED_IMAGES] ?: "[]", type) ?: mutableListOf()
             current.removeIf { it.id == imageId }
             prefs[KEY_SAVED_IMAGES] = gson.toJson(current)
+        }
+    }
+
+    /**
+     * Generated try-on / outfit images are written to the volatile [Context.getCacheDir],
+     * which the OS may purge at any time. Copy such a file into persistent [Context.getFilesDir]
+     * so saved looks survive cache eviction. No-op for remote URLs or already-persistent paths.
+     */
+    fun persistLookImage(path: String): String {
+        if (!path.startsWith("/")) return path  // remote URL
+        val src = File(path)
+        if (!src.exists()) return path
+        if (!src.absolutePath.startsWith(context.cacheDir.absolutePath)) return path  // already persistent
+        return try {
+            val dir = File(context.filesDir, "saved_looks").apply { mkdirs() }
+            val dest = File(dir, src.name)
+            src.copyTo(dest, overwrite = true)
+            dest.absolutePath
+        } catch (e: Exception) {
+            path
+        }
+    }
+
+    // --- Wishlist ---
+    val wishlistFlow: Flow<List<WishlistItem>> = context.dataStore.data.map { prefs ->
+        val json = prefs[KEY_WISHLIST] ?: return@map emptyList()
+        val type = object : TypeToken<List<WishlistItem>>() {}.type
+        gson.fromJson<List<WishlistItem>>(json, type) ?: emptyList()
+    }
+
+    suspend fun saveWishlistItem(item: WishlistItem) {
+        context.dataStore.edit { prefs ->
+            val type = object : TypeToken<List<WishlistItem>>() {}.type
+            val current: MutableList<WishlistItem> =
+                gson.fromJson(prefs[KEY_WISHLIST] ?: "[]", type) ?: mutableListOf()
+            current.removeAll { it.id == item.id }
+            current.add(0, item)
+            prefs[KEY_WISHLIST] = gson.toJson(current)
+        }
+    }
+
+    suspend fun removeWishlistItem(itemId: String) {
+        context.dataStore.edit { prefs ->
+            val type = object : TypeToken<List<WishlistItem>>() {}.type
+            val current: MutableList<WishlistItem> =
+                gson.fromJson(prefs[KEY_WISHLIST] ?: "[]", type) ?: mutableListOf()
+            current.removeAll { it.id == itemId }
+            prefs[KEY_WISHLIST] = gson.toJson(current)
+        }
+    }
+
+    suspend fun updateWishlistItem(item: WishlistItem) = saveWishlistItem(item)
+
+    suspend fun importWishlist(items: List<WishlistItem>) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_WISHLIST] = gson.toJson(items)
         }
     }
 

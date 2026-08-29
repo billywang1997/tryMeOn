@@ -85,7 +85,7 @@ data class ImageGenerationResponse(
 class ClaudeApiService(private val context: Context) {
 
     private val httpClient by lazy {
-        OkHttpClient.Builder()
+        RelayHttp.builder()
             .connectTimeout(60, TimeUnit.SECONDS)
             .readTimeout(120, TimeUnit.SECONDS)
             .writeTimeout(120, TimeUnit.SECONDS)
@@ -94,7 +94,7 @@ class ClaudeApiService(private val context: Context) {
 
     private val api: OpenAiApi by lazy {
         val logging = HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC }
-        val client = OkHttpClient.Builder()
+        val client = RelayHttp.builder()
             .addInterceptor(logging)
             .connectTimeout(60, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
@@ -174,46 +174,6 @@ $point4
         response.choices.firstOrNull()?.message?.content ?: "Unable to get outfit suggestions. Please check your network connection."
     }
 
-    suspend fun analyzeTryOn(
-        apiKey: String,
-        userImagePath: String,
-        clothingItem: ClothingItem,
-        profile: UserProfile?
-    ): String = withContext(Dispatchers.IO) {
-        val contents = mutableListOf<OpenAiContent>()
-
-        val profileDesc = if (profile != null && profile.height > 0) {
-            "User: height ${profile.height}cm, weight ${profile.weight}kg, ${profile.gender}"
-        } else "the user"
-
-        contents.add(OpenAiContent(
-            type = "text",
-            text = "This is a photo of ${profileDesc}, along with a ${clothingItem.category.label}. Please analyze whether this garment suits the user's body shape and provide styling suggestions and a fit prediction."
-        ))
-
-        val userBase64 = encodeImageToBase64(userImagePath)
-        if (userBase64 != null) {
-            contents.add(OpenAiContent(
-                type = "image_url",
-                imageUrl = ImageUrl(url = "data:image/jpeg;base64,$userBase64")
-            ))
-        }
-
-        val clothingBase64 = encodeImageToBase64(clothingItem.imagePath)
-        if (clothingBase64 != null) {
-            contents.add(OpenAiContent(
-                type = "image_url",
-                imageUrl = ImageUrl(url = "data:image/jpeg;base64,$clothingBase64")
-            ))
-        }
-
-        val request = OpenAiRequest(
-            messages = listOf(OpenAiMessage(role = "user", content = contents))
-        )
-
-        val response = api.chat(auth = "Bearer $apiKey", request = request)
-        response.choices.firstOrNull()?.message?.content ?: "Unable to get try-on analysis. Please check your network connection."
-    }
 
     suspend fun getEmergencyOutfit(
         apiKey: String,
@@ -268,32 +228,6 @@ Suggestion: (one sentence)
         api.chat("Bearer $apiKey", request).choices.firstOrNull()?.message?.content ?: "Unable to rate"
     }
 
-    suspend fun generateCapsuleWardrobe(
-        apiKey: String,
-        clothes: List<ClothingItem>
-    ): String = withContext(Dispatchers.IO) {
-        val clothingDesc = clothes.joinToString("\n") {
-            "[${it.id}] ${it.category.label}: ${it.name.ifEmpty { it.category.label }} (${it.color})"
-        }
-        val prompt = """
-From the wardrobe below, select up to 10 core pieces that work well together to form a practical capsule wardrobe.
-
-Requirements:
-1. List the selected pieces (by ID and name)
-2. Explain how many different outfits these 10 pieces can create (give a specific number and the logic)
-3. Provide 2-3 sentences on why you chose these pieces
-
-Wardrobe:
-$clothingDesc
-
-Be concise and compelling.
-        """.trimIndent()
-        val request = OpenAiRequest(
-            messages = listOf(OpenAiMessage("user", listOf(OpenAiContent("text", prompt)))),
-            maxTokens = 600
-        )
-        api.chat("Bearer $apiKey", request).choices.firstOrNull()?.message?.content ?: "Unable to generate capsule wardrobe"
-    }
 
     suspend fun detectClothingCategory(apiKey: String, imageBase64: String): com.example.myapplication.domain.model.ClothingCategory = withContext(Dispatchers.IO) {
         val contents = listOf(
@@ -386,9 +320,9 @@ Return ONLY a valid JSON array, no markdown:
         styleKeywords: Set<String> = emptySet()
     ): String = withContext(Dispatchers.IO) {
         val normalizedGender = when (gender.trim().lowercase()) {
-            "female", "女", "f" -> "Female"
-            "male", "男", "m"   -> "Male"
-            else                -> gender
+            "female", "f" -> "Female"
+            "male", "m"   -> "Male"
+            else          -> gender
         }
         val gw = when (normalizedGender) { "Female" -> "woman"; "Male" -> "man"; else -> "" }
 
@@ -455,101 +389,244 @@ CAT:bag|reason (under 10 words)|$gw [specific style + item]
         api.chat("Bearer $apiKey", request).choices.firstOrNull()?.message?.content ?: ""
     }
 
-    suspend fun getShoppingRecommendations(
+    // Complete the Look: given one wardrobe item, return 2-3 missing pieces to complete an outfit.
+    // Returns lines formatted as: "QUERY|<short search query>|<one-line reason>"
+    suspend fun completeTheLook(
         apiKey: String,
+        anchorItem: ClothingItem,
         clothes: List<ClothingItem>,
         gender: String = ""
     ): String = withContext(Dispatchers.IO) {
-        val clothingDesc = clothes.joinToString("\n") {
+        val wardrobeDesc = clothes.take(40).joinToString("\n") {
             "- ${it.category.label}: ${it.name.ifEmpty { it.category.label }}${if (it.color.isNotEmpty()) " (${it.color})" else ""}"
         }
-        val genderNote = when (gender) {
-            "Female" -> "User gender: Female. All eBay search terms must include women."
-            "Male" -> "User gender: Male. All eBay search terms must include men."
-            else -> "Add an appropriate gender word (women/men) to the eBay search terms."
-        }
+        val genderHint = if (gender.isNotBlank()) "User gender: $gender. Prioritize $gender items." else ""
+        val anchorDesc = "${anchorItem.category.label}: ${anchorItem.name.ifEmpty { anchorItem.category.label }}${if (anchorItem.color.isNotEmpty()) " (${anchorItem.color})" else ""}"
         val prompt = """
-Based on my wardrobe, recommend 4 secondhand items most worth buying to complete my outfits.
-$genderNote
+You're a senior fashion stylist. The user has this anchor item: $anchorDesc
 
-My wardrobe:
-$clothingDesc
+Their wardrobe:
+$wardrobeDesc
 
-Return strictly in the following format, one item per line, exactly 4 lines:
-ITEM:title|reason (under 15 words)|eBay search term
+$genderHint
 
-Return only the 4 ITEM lines, nothing else.
+Pick 2-3 pieces that would COMPLETE a head-to-toe outfit around this anchor. If the anchor is a top, recommend bottoms / shoes / outerwear; if it's a bottom, recommend tops / shoes / outerwear. Each piece must be a different category from the anchor and from each other.
+
+For CATEGORY, use EXACTLY one of: INNER (tops/shirts), OUTERWEAR, PANTS (bottoms/skirts), DRESS, SHOES, ACCESSORY, BAG.
+
+Return EXACTLY this format, one per line, no extra text:
+QUERY|<CATEGORY>|<2-5 word shopping search query>|<short one-line reason, under 60 chars>
+
+Example:
+QUERY|INNER|white slim crew tee|Clean base layer to balance the print
+QUERY|PANTS|cream wool trousers|Adds warmth and a tailored finish
+QUERY|SHOES|tan leather loafers|Grounds the look with a smart finish
         """.trimIndent()
         val request = OpenAiRequest(
             messages = listOf(OpenAiMessage("user", listOf(OpenAiContent("text", prompt)))),
-            maxTokens = 200
+            maxTokens = 400
         )
         api.chat("Bearer $apiKey", request).choices.firstOrNull()?.message?.content ?: ""
     }
 
-    suspend fun suggestOutfitWithNewItem(
+    // Dupe Finder: given an item, return budget-friendly look-alike search queries.
+    // Format per line: "DUPE|<2-5 word query>|<why it's a good dupe, under 60 chars>"
+    // Plus one line: "TIER|<estimated price range of the original, e.g. $120-180>"
+
+    /**
+     * English wish → the Chinese phrases a Taobao seller would actually have
+     * typed, plus a parcel estimate so freight can be quoted before anything is
+     * bought.
+     *
+     * Asking for seller vocabulary rather than a translation is the whole trick:
+     * "cropped linen blazer" translated literally returns nothing, while
+     * "亚麻小西装 短款" returns the listing. The parcel figures matter because
+     * air freight bills volume, and a user has no idea what their coat measures
+     * folded.
+     */
+    /**
+     * Pieces this wardrobe is missing, phrased as things to search for.
+     *
+     * Deliberately lighter than [closetAudit]: no score, no palette, no prose —
+     * just the shortest route from "here is what I own" to "here is what to buy
+     * and what it lands at". The gap the user already accepts is the strongest
+     * possible seed for a sourcing search, and it needs no typing at all.
+     */
+    suspend fun closetGapQueries(
         apiKey: String,
-        itemTitle: String,
-        itemImageUrl: String = "",
-        clothes: List<ClothingItem>
+        clothes: List<ClothingItem>,
+        gender: String = ""
     ): String = withContext(Dispatchers.IO) {
-        val clothingDesc = clothes.joinToString("\n") {
-            "- ${it.category.label}: ${it.name.ifEmpty { it.category.label }}${if (it.color.isNotEmpty()) " (${it.color})" else ""}"
-        }
+        if (clothes.isEmpty()) return@withContext ""
+        val inventory = clothes
+            .groupBy { it.category.label }
+            .entries.joinToString("\n") { (cat, items) ->
+                "$cat (${items.size}): " + items.take(12).joinToString(", ") {
+                    listOf(it.color, it.name).filter(String::isNotBlank).joinToString(" ")
+                }
+            }
+        val genderHint = if (gender.isNotBlank()) "Shopper gender: $gender." else ""
         val prompt = """
-I'm considering buying this secondhand item: "$itemTitle"
+Here is someone's entire wardrobe:
 
-My current wardrobe:
-$clothingDesc
+$inventory
 
-Please help me:
-1. Whether this item matches my wardrobe (one-sentence conclusion)
-2. Pick 2-3 pieces from my wardrobe that pair well with it and explain why
-3. What occasions suit this combination
-4. Whether this item is worth buying (give reasons)
+$genderHint
 
-Be concise and direct, under 200 words.
+Name the 4 pieces that would create the most new outfits with what they already own. Judge by how many existing items each one combines with, not by what is fashionable. Skip anything they clearly already have.
+
+Each query must read like something typed into a shop search — concrete about cut, fabric and colour — because it will be used to search a Chinese marketplace.
+
+Return EXACTLY this format, no extra text:
+GAP|<2-5 word shopping query in English>|<how many existing pieces it works with and why, under 60 chars>
+GAP|...
+GAP|...
+GAP|...
         """.trimIndent()
-        val contents = mutableListOf<OpenAiContent>(OpenAiContent("text", prompt))
-        if (itemImageUrl.isNotEmpty()) {
-            contents.add(OpenAiContent("image_url", imageUrl = ImageUrl(url = itemImageUrl, detail = "low")))
-        }
         val request = OpenAiRequest(
-            messages = listOf(OpenAiMessage("user", contents)),
-            maxTokens = 400
+            messages = listOf(OpenAiMessage("user", listOf(OpenAiContent("text", prompt)))),
+            maxTokens = 350
         )
-        api.chat("Bearer $apiKey", request).choices.firstOrNull()?.message?.content ?: "Unable to get suggestions"
+        api.chat("Bearer $apiKey", request).choices.firstOrNull()?.message?.content ?: ""
     }
 
-    suspend fun matchStyleToWardrobe(
+    suspend fun sourcingQuery(
         apiKey: String,
-        styleName: String,
-        styleKeywords: String,
-        clothes: List<ClothingItem>
+        englishDescription: String,
+        gender: String = "",
+        categoryHint: String = ""
     ): String = withContext(Dispatchers.IO) {
-        val clothingDesc = clothes.joinToString("\n") {
-            "[${it.id}] ${it.category.label}: ${it.name.ifEmpty { it.category.label }} (${it.color})"
-        }
+        val genderHint = if (gender.isNotBlank()) "Shopper gender: $gender." else ""
+        val catHint = if (categoryHint.isNotBlank()) "Likely category: $categoryHint." else ""
         val prompt = """
-Style: $styleName
-Style traits: $styleKeywords
+You help an English-speaking shopper in Australia buy from Taobao/1688, where they cannot read or search in Chinese.
 
-My wardrobe:
-$clothingDesc
+They want: "$englishDescription"
+$genderHint $catHint
 
-Please do the following:
-1. From my wardrobe, identify the pieces that best fit the "$styleName" style (list by ID and name, up to 8 pieces)
-2. Use these pieces to assemble 1-2 specific outfits (list the pieces in each look)
-3. Tell me 2-3 pieces I'm still missing to complete this style (brief descriptions)
+Write the Chinese search phrases a Taobao SELLER would put in the listing title — not a literal translation. Use the marketing vocabulary Chinese sellers actually use (fabric, silhouette, style-tribe and fit words). Order them best-match first. Keep each phrase 3-10 characters plus optional modifiers, the way a real search box is used.
 
-Be concise and to the point — no filler.
+Then estimate how the item ships: its packed weight in grams and folded dimensions in cm. Air freight is billed on volume, so these must be the compressed parcel, not the garment laid flat.
+
+Finish with one line of advice specific to buying THIS from a Chinese seller (sizing runs, fabric traps, common misdescriptions).
+
+Return EXACTLY this format, no extra text:
+CN|<best Chinese search phrase>
+CN|<second phrase, different angle>
+CN|<third phrase, broader>
+EN|<what you understood they want, under 60 chars>
+CAT|<one of INNER OUTERWEAR PANTS DRESS SHOES ACCESSORY BAG>
+PARCEL|<grams>|<length cm>|<width cm>|<height cm>
+NOTE|<buying advice, under 80 chars>
+        """.trimIndent()
+        val request = OpenAiRequest(
+            messages = listOf(OpenAiMessage("user", listOf(OpenAiContent("text", prompt)))),
+            maxTokens = 400
+        )
+        api.chat("Bearer $apiKey", request).choices.firstOrNull()?.message?.content ?: ""
+    }
+
+    // Trending Now: season + style aware list of trending pieces.
+    // Format per line: "TREND|<2-5 word query>|<one-line why it's trending, under 65 chars>"
+
+    // Gift Mode: recipient questionnaire → 6 gift queries with reasons.
+    // Returns lines: "GIFT|<short search query>|<reason>"
+
+    // Style Twin: returns 2-3 celebrity style matches with % + reasoning.
+    // Format per line: "TWIN|<celebrity name>|<percentage>|<one-line reason>"
+    // Plus a final line: "SHOP|<query1>|<query2>|<query3>" for shopping their look.
+    suspend fun styleTwin(
+        apiKey: String,
+        clothes: List<ClothingItem>,
+        styleKeywords: Set<String> = emptySet(),
+        gender: String = ""
+    ): String = withContext(Dispatchers.IO) {
+        val wardrobeDesc = clothes.take(40).joinToString("\n") {
+            "- ${it.category.label}: ${it.name.ifEmpty { it.category.label }}${if (it.color.isNotEmpty()) " (${it.color})" else ""}"
+        }
+        val keywordHint = if (styleKeywords.isNotEmpty()) "Stated style preferences: ${styleKeywords.joinToString(", ")}" else ""
+        val genderHint = if (gender.isNotBlank()) "Gender: $gender (pick celebrities of matching gender)" else ""
+        val prompt = """
+You're a fashion editor. Analyze this wardrobe and find the user's "style twins" — 2-3 well-known celebrities whose signature style most closely matches.
+
+Wardrobe:
+$wardrobeDesc
+
+$keywordHint
+$genderHint
+
+Return EXACTLY this format, no extra text:
+TWIN|<celebrity name>|<percentage 0-100>|<one short reason, under 70 chars>
+TWIN|...
+TWIN|...
+SHOP|<query1>|<query2>|<query3>
+
+The 3 SHOP queries are search terms for items that capture the top celebrity's signature look. Each query 2-5 words.
+
+Example:
+TWIN|Hailey Bieber|62|Oversized blazers, baggy denim, minimalist neutrals
+TWIN|Phoebe Philo|24|Clean lines, monochrome palette, structured tailoring
+TWIN|Sofia Richie|14|Quiet luxury, soft tones, polished basics
+SHOP|oversized black blazer|baggy straight jeans|white ribbed tank
         """.trimIndent()
         val request = OpenAiRequest(
             messages = listOf(OpenAiMessage("user", listOf(OpenAiContent("text", prompt)))),
             maxTokens = 500
         )
-        api.chat("Bearer $apiKey", request).choices.firstOrNull()?.message?.content ?: "Unable to analyze"
+        api.chat("Bearer $apiKey", request).choices.firstOrNull()?.message?.content ?: ""
     }
+
+    // Closet Audit: returns a structured report with sections.
+    // Format:
+    //   SCORE|<0-100>
+    //   PALETTE|<color>,<color>,<color>,...
+    //   STRENGTH|<one paragraph>
+    //   GAPS|<gap1>;<gap2>;<gap3>
+    //   BUY|<query>|<reason>
+    //   BUY|<query>|<reason>
+    //   ... up to 6 BUY lines
+    suspend fun closetAudit(
+        apiKey: String,
+        clothes: List<ClothingItem>,
+        profile: UserProfile?,
+        styleKeywords: Set<String> = emptySet()
+    ): String = withContext(Dispatchers.IO) {
+        val wardrobeDesc = clothes.take(60).joinToString("\n") {
+            "- ${it.category.label}: ${it.name.ifEmpty { it.category.label }}${if (it.color.isNotEmpty()) " (${it.color})" else ""}${if (it.brand.isNotEmpty()) " by ${it.brand}" else ""}"
+        }
+        val profileLine = if (profile != null && profile.height > 0)
+            "User: ${profile.gender}, height ${profile.height}cm, weight ${profile.weight}kg." else ""
+        val styleLine = if (styleKeywords.isNotEmpty()) "Stated style preferences: ${styleKeywords.joinToString(", ")}" else ""
+        val prompt = """
+You're a luxury personal stylist conducting a closet audit. Analyze this wardrobe and produce a professional report.
+
+$profileLine
+$styleLine
+
+Wardrobe (${clothes.size} items):
+$wardrobeDesc
+
+Return EXACTLY this format, no extra commentary outside the structure:
+SCORE|<wardrobe versatility score, 0-100 integer>
+PALETTE|<comma-separated 4-6 dominant colors as plain English, e.g. "cream, charcoal, camel, off-white">
+STRENGTH|<one short paragraph (2 sentences max) on what this wardrobe does well>
+GAPS|<gap1>;<gap2>;<gap3>
+BUY|<2-5 word shopping query>|<one-line reason under 70 chars why this fills a gap>
+BUY|...
+BUY|...
+BUY|...
+BUY|...
+BUY|...
+
+Provide exactly 6 BUY suggestions. Each should be high-impact for this specific wardrobe — not generic. Use precise descriptive queries (color, fabric, silhouette).
+        """.trimIndent()
+        val request = OpenAiRequest(
+            messages = listOf(OpenAiMessage("user", listOf(OpenAiContent("text", prompt)))),
+            maxTokens = 900
+        )
+        api.chat("Bearer $apiKey", request).choices.firstOrNull()?.message?.content ?: ""
+    }
+
 
     // Generate a virtual try-on image using gpt-image-1.
     // faceImagePath: local file path or https URL of the person's photo.
@@ -650,9 +727,9 @@ Be concise and to the point — no filler.
     private fun buildBodyDesc(profile: UserProfile?): String {
         if (profile == null || profile.height <= 0) return ""
         val genderWord = when (profile.gender.trim().lowercase()) {
-            "female", "女", "f" -> "woman"
-            "male", "男", "m"   -> "man"
-            else                -> "person"
+            "female", "f" -> "woman"
+            "male", "m"   -> "man"
+            else          -> "person"
         }
         val heightDesc = when {
             profile.height < 155 -> "petite"

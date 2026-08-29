@@ -5,6 +5,7 @@ import com.example.myapplication.domain.model.ClothingItem
 import com.example.myapplication.domain.model.OutfitLog
 import com.example.myapplication.domain.model.SavedImage
 import com.example.myapplication.domain.model.UserProfile
+import com.example.myapplication.domain.model.WishlistItem
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.tasks.await
@@ -153,6 +154,7 @@ class FirestoreRepository {
                 "path"      to image.path,
                 "type"      to image.type,
                 "label"     to image.label,
+                "note"      to image.note,
                 "createdAt" to image.createdAt
             )
         ).await()
@@ -170,9 +172,30 @@ class FirestoreRepository {
                     path      = doc.getString("path") ?: "",
                     type      = doc.getString("type") ?: "look",
                     label     = doc.getString("label") ?: "",
+                    note      = doc.getString("note") ?: "",
                     createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis()
                 )
             }.getOrNull()
+        }
+    }.getOrDefault(emptyList())
+
+    // ── Wishlist ─────────────────────────────────────────────────────────
+
+    // Firestore document IDs cannot contain '/'. WishlistItem.id is derived from
+    // shop item ids which are otherwise valid, so only '/' needs sanitizing.
+    private fun wishlistDocId(rawId: String) = rawId.replace("/", "_")
+
+    suspend fun saveWishlistItem(uid: String, item: WishlistItem) = runCatching {
+        userDoc(uid).collection("wishlist").document(wishlistDocId(item.id)).set(item).await()
+    }
+
+    suspend fun deleteWishlistItem(uid: String, id: String) = runCatching {
+        userDoc(uid).collection("wishlist").document(wishlistDocId(id)).delete().await()
+    }
+
+    suspend fun loadWishlist(uid: String): List<WishlistItem> = runCatching {
+        userDoc(uid).collection("wishlist").get().await().documents.mapNotNull { doc ->
+            runCatching { doc.toObject(WishlistItem::class.java) }.getOrNull()
         }
     }.getOrDefault(emptyList())
 

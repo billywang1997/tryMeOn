@@ -15,7 +15,7 @@ private const val ASOS_HOST = "asos2.p.rapidapi.com"
 class AsosApiService {
 
     private val gson = Gson()
-    private val client = OkHttpClient.Builder()
+    private val client = RelayHttp.builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build()

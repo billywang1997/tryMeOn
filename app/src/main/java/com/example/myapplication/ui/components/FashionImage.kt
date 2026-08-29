@@ -17,7 +17,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
-import com.example.myapplication.data.remote.AmazonImageSearchService
 import com.example.myapplication.data.remote.GoogleImageSearchService
 import com.example.myapplication.data.remote.UnsplashService
 import com.example.myapplication.ui.theme.Ash
@@ -48,14 +47,12 @@ fun FashionImage(
     LaunchedEffect(model) {
         resolvedUrl = null  // reset on model change
         when {
-            model is String && model.startsWith("amazon:") -> {
-                val q = model.removePrefix("amazon:")
-                resolvedUrl = AmazonImageSearchService.resolveUrl(q)
-                    ?: GoogleImageSearchService.resolveUrl(q)
-                    ?: UnsplashService.resolveUrl(cleanForUnsplash(q))
-            }
-            model is String && model.startsWith("google:") -> {
-                val q = model.removePrefix("google:")
+            // amazon: and google: both resolve to face-free packshots.
+            // Google ghost-mannequin search is tried first; Amazon product
+            // photos (which usually feature a model's face) are intentionally
+            // not used for wardrobe essentials.
+            model is String && (model.startsWith("amazon:") || model.startsWith("google:")) -> {
+                val q = model.substringAfter(':')
                 resolvedUrl = GoogleImageSearchService.resolveUrl(q)
                     ?: UnsplashService.resolveUrl(cleanForUnsplash(q))
             }

@@ -66,7 +66,16 @@ fun ProfileScreen(
     wardrobeRepository: WardrobeRepository,
     authRepository: FirebaseAuthRepository,
     firestoreRepository: FirestoreRepository,
-    contentPadding: PaddingValues
+    contentPadding: PaddingValues,
+    claudeApiService: com.example.myapplication.data.remote.ClaudeApiService? = null,
+    apiKey: String = "",
+    ebayClientId: String = "",
+    ebayClientSecret: String = "",
+    serpApiKey: String = "",
+    ebayAffiliateCampaignId: String = "",
+    styleKeywords: Set<String> = emptySet(),
+    wishlistRepository: com.example.myapplication.data.repository.WishlistRepository? = null,
+    logRepository: com.example.myapplication.data.repository.OutfitLogRepository? = null
 ) {
     val context = LocalContext.current
     val settings = remember { AppSettings(context) }
@@ -173,6 +182,37 @@ fun ProfileScreen(
             },
             modifier = Modifier.padding(horizontal = 20.dp)
         )
+
+        // ── Wardrobe Worth ───────────────────────────────────────────────
+        val logs by (logRepository?.getLogs() ?: kotlinx.coroutines.flow.flowOf(emptyList<com.example.myapplication.domain.model.OutfitLog>())).collectAsState(emptyList())
+        if (wardrobeItems.any { it.price > 0 }) {
+            Spacer(Modifier.height(20.dp))
+            com.example.myapplication.ui.components.WardrobeWorthCard(
+                items = wardrobeItems,
+                logs = logs
+            )
+        }
+
+        // ── Style Twin (aha + affiliate) ─────────────────────────────────
+        if (claudeApiService != null && apiKey.isNotBlank() && wardrobeItems.isNotEmpty()) {
+            Spacer(Modifier.height(20.dp))
+            val ebaySvc = remember { com.example.myapplication.data.remote.EbayApiService() }
+            val serpSvc = remember { com.example.myapplication.data.remote.SerpApiService() }
+            com.example.myapplication.ui.components.StyleTwinCard(
+                wardrobe = wardrobeItems,
+                styleKeywords = styleKeywords,
+                gender = profile.gender,
+                apiKey = apiKey,
+                claudeService = claudeApiService,
+                ebayService = ebaySvc,
+                ebayClientId = ebayClientId,
+                ebayClientSecret = ebayClientSecret,
+                serpService = serpSvc,
+                serpApiKey = serpApiKey,
+                ebayAffiliateCampaignId = ebayAffiliateCampaignId,
+                wishlistRepository = wishlistRepository
+            )
+        }
 
         Spacer(Modifier.height(24.dp))
         HorizontalDivider(color = Mist, modifier = Modifier.padding(horizontal = 20.dp))

@@ -12,7 +12,7 @@ object GoogleImageSearchService {
     private var apiKey: String = ""
     private var cx: String = ""
     private val cache = ConcurrentHashMap<String, String>()
-    private val client = OkHttpClient()
+    private val client = RelayHttp.builder().build()
 
     // Fashion retailer sites known for clean product-only shots
     private val PRODUCT_SITES = "site:asos.com OR site:theiconic.com.au OR site:net-a-porter.com OR site:shopbop.com OR site:revolve.com"
@@ -24,25 +24,34 @@ object GoogleImageSearchService {
 
     val isConfigured get() = apiKey.isNotBlank() && cx.isNotBlank()
 
+    // Terms appended to every query to force face-free packshot results.
+    private const val PACKSHOT = "ghost mannequin packshot product only"
+    private const val EXCLUDE = "-model -person -woman -man -face -portrait -wearing"
+
     /**
-     * Resolves a product image URL for the given clothing query.
-     * Strategy:
-     *   1. Search within known fashion retailer sites (ASOS, The Iconic, etc.) — best product shots
-     *   2. Fall back to all-web search with "-model -person" exclusions
+     * Resolves a face-free product image URL for the given clothing query.
+     * Every pass forces ghost-mannequin / packshot style and excludes people,
+     * so wardrobe essentials never show a model's face.
      */
     suspend fun resolveUrl(query: String): String? = withContext(Dispatchers.IO) {
         cache[query]?.let { return@withContext it }
         if (!isConfigured) return@withContext null
 
-        // Pass 1: retailer-scoped — gets clean e-commerce product shots
-        val retailerResult = searchGoogle("$query ($PRODUCT_SITES)")
-        if (retailerResult != null) {
-            cache[query] = retailerResult
-            return@withContext retailerResult
+        // Strip any gender words — they pull in model shots
+        val clean = query
+            .replace(Regex("(?i)\\b(women'?s?|men'?s?|woman|man|female|male|ghost mannequin|product)\\b"), "")
+            .replace(Regex("\\s{2,}"), " ")
+            .trim()
+
+        // Pass 1: retailer-scoped packshot
+        val retailer = searchGoogle("$clean $PACKSHOT ($PRODUCT_SITES) $EXCLUDE")
+        if (retailer != null) {
+            cache[query] = retailer
+            return@withContext retailer
         }
 
-        // Pass 2: all-web with model-exclusion terms
-        val fallback = searchGoogle("$query flat lay ghost mannequin product -model -person -woman -man")
+        // Pass 2: all-web packshot
+        val fallback = searchGoogle("$clean flat lay $PACKSHOT $EXCLUDE")
         if (fallback != null) cache[query] = fallback
         fallback
     }

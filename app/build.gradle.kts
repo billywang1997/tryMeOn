@@ -13,6 +13,17 @@ val localProps = Properties().apply {
 }
 fun secret(key: String): String = localProps.getProperty(key, "")
 
+// Base URL of the Cloud Functions relay (see functions/). When set, the app
+// sends every third-party API call through it and no upstream key needs to be
+// — or should be — compiled into the APK.
+val relayBaseUrl: String = secret("RELAY_BASE_URL")
+
+// Upstream keys are only ever a debug convenience for calling APIs directly.
+// A release build that has a relay must ship none of them: anything in
+// BuildConfig is readable by anyone who unzips the APK.
+fun upstreamSecret(key: String, isRelease: Boolean): String =
+    if (isRelease && relayBaseUrl.isNotBlank()) "" else secret(key)
+
 android {
     namespace = "com.example.myapplication"
     compileSdk {
@@ -30,24 +41,48 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "CLAUDE_API_KEY",            "\"${secret("CLAUDE_API_KEY")}\"")
-        buildConfigField("String", "FASHN_API_KEY",             "\"${secret("FASHN_API_KEY")}\"")
-        buildConfigField("String", "UNSPLASH_ACCESS_KEY",       "\"${secret("UNSPLASH_ACCESS_KEY")}\"")
-        buildConfigField("String", "GOOGLE_SEARCH_KEY",         "\"${secret("GOOGLE_SEARCH_KEY")}\"")
-        buildConfigField("String", "GOOGLE_SEARCH_CX",          "\"${secret("GOOGLE_SEARCH_CX")}\"")
-        buildConfigField("String", "EBAY_CLIENT_ID",            "\"${secret("EBAY_CLIENT_ID")}\"")
-        buildConfigField("String", "EBAY_CLIENT_SECRET",        "\"${secret("EBAY_CLIENT_SECRET")}\"")
+        buildConfigField("String", "RELAY_BASE_URL", "\"$relayBaseUrl\"")
+
+        // Affiliate/publisher IDs are not credentials — they identify us for
+        // commission attribution and are meant to travel with the click.
         buildConfigField("String", "EBAY_AFFILIATE_CAMPAIGN_ID","\"${secret("EBAY_AFFILIATE_CAMPAIGN_ID")}\"")
-        buildConfigField("String", "RAPID_API_KEY",             "\"${secret("RAPID_API_KEY")}\"")
+        buildConfigField("String", "SKIMLINKS_ID",              "\"${secret("SKIMLINKS_ID")}\"")
+        buildConfigField("String", "SOVRN_SITE_ID",             "\"${secret("SOVRN_SITE_ID")}\"")
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "CLAUDE_API_KEY",       "\"${upstreamSecret("CLAUDE_API_KEY", false)}\"")
+            buildConfigField("String", "FASHN_API_KEY",        "\"${upstreamSecret("FASHN_API_KEY", false)}\"")
+            buildConfigField("String", "UNSPLASH_ACCESS_KEY",  "\"${upstreamSecret("UNSPLASH_ACCESS_KEY", false)}\"")
+            buildConfigField("String", "GOOGLE_SEARCH_KEY",    "\"${upstreamSecret("GOOGLE_SEARCH_KEY", false)}\"")
+            buildConfigField("String", "GOOGLE_SEARCH_CX",     "\"${upstreamSecret("GOOGLE_SEARCH_CX", false)}\"")
+            buildConfigField("String", "EBAY_CLIENT_ID",       "\"${upstreamSecret("EBAY_CLIENT_ID", false)}\"")
+            buildConfigField("String", "EBAY_CLIENT_SECRET",   "\"${upstreamSecret("EBAY_CLIENT_SECRET", false)}\"")
+            buildConfigField("String", "RAPID_API_KEY",        "\"${upstreamSecret("RAPID_API_KEY", false)}\"")
+            buildConfigField("String", "SERP_API_KEY",         "\"${upstreamSecret("SERP_API_KEY", false)}\"")
+            buildConfigField("String", "SCRAPER_API_KEY",      "\"${upstreamSecret("SCRAPER_API_KEY", false)}\"")
+        }
         release {
+            buildConfigField("String", "CLAUDE_API_KEY",       "\"${upstreamSecret("CLAUDE_API_KEY", true)}\"")
+            buildConfigField("String", "FASHN_API_KEY",        "\"${upstreamSecret("FASHN_API_KEY", true)}\"")
+            buildConfigField("String", "UNSPLASH_ACCESS_KEY",  "\"${upstreamSecret("UNSPLASH_ACCESS_KEY", true)}\"")
+            buildConfigField("String", "GOOGLE_SEARCH_KEY",    "\"${upstreamSecret("GOOGLE_SEARCH_KEY", true)}\"")
+            buildConfigField("String", "GOOGLE_SEARCH_CX",     "\"${upstreamSecret("GOOGLE_SEARCH_CX", true)}\"")
+            buildConfigField("String", "EBAY_CLIENT_ID",       "\"${upstreamSecret("EBAY_CLIENT_ID", true)}\"")
+            buildConfigField("String", "EBAY_CLIENT_SECRET",   "\"${upstreamSecret("EBAY_CLIENT_SECRET", true)}\"")
+            buildConfigField("String", "RAPID_API_KEY",        "\"${upstreamSecret("RAPID_API_KEY", true)}\"")
+            buildConfigField("String", "SERP_API_KEY",         "\"${upstreamSecret("SERP_API_KEY", true)}\"")
+            buildConfigField("String", "SCRAPER_API_KEY",      "\"${upstreamSecret("SCRAPER_API_KEY", true)}\"")
+
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Signed with the debug keystore for now (personal/test distribution).
+            // Replace with a real release signingConfig before publishing.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
@@ -57,6 +92,14 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+    testOptions {
+        unitTests {
+            // Parsers log when they swallow a malformed payload; the android.jar
+            // stub throws on any Log call, which fails the very tests that feed
+            // them malformed payloads on purpose.
+            isReturnDefaultValues = true
+        }
     }
 }
 
@@ -98,9 +141,18 @@ dependencies {
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-storage")
+    implementation("com.google.firebase:firebase-functions")
     implementation(libs.play.services.auth)
+    // Google Play Billing
+    implementation(libs.billing.ktx)
+    // WorkManager
+    implementation(libs.androidx.work.runtime.ktx)
 
     testImplementation(libs.junit)
+    testImplementation(libs.okhttp)
+    // android.jar stubs org.json in unit tests: every call throws "not mocked",
+    // which parsers with a catch-all would silently report as a parse failure.
+    testImplementation("org.json:json:20240303")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

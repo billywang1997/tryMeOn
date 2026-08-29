@@ -54,7 +54,7 @@ class ReplicateApiService {
 
     private val gson = Gson()
 
-    private val client = OkHttpClient.Builder()
+    private val client = RelayHttp.builder()
         .addInterceptor(HttpLoggingInterceptor { Log.d(TAG, it) }.apply {
             level = HttpLoggingInterceptor.Level.BODY
         })

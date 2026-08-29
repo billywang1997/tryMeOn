@@ -379,8 +379,12 @@ Each search query must read like something typed into a shop search: concrete ab
 
 The reason must name what it works with from their wardrobe, with counts.
 
+Give the search phrase twice: once in English, and once as a Chinese
+marketplace seller would title the listing — seller vocabulary, not a literal
+translation, since a literal one returns nothing.
+
 Return EXACTLY 4 lines, nothing else:
-CAT:<one of top|jacket|bottoms|set|shoes|bag>|<reason naming their pieces, under 12 words>|<search query>
+CAT:<one of top|jacket|bottoms|set|shoes|bag>|<reason naming their pieces, under 12 words>|<English query>|<Chinese query>
         """.trimIndent()
 
         val request = OpenAiRequest(
@@ -555,7 +559,7 @@ Name the 4 pieces that would create the most new outfits with what they already 
 Each query must read like something typed into a shop search — concrete about cut, fabric and colour — because it will be used to search a Chinese marketplace.
 
 Return EXACTLY this format, no extra text:
-GAP|<2-5 word shopping query in English>|<how many existing pieces it works with and why, under 60 chars>
+GAP|<2-5 word shopping query in English>|<how many existing pieces it works with and why, under 60 chars>|<the same item as a Chinese marketplace seller would title it>
 GAP|...
 GAP|...
 GAP|...
@@ -688,7 +692,7 @@ SCORE|<wardrobe versatility score, 0-100 integer>
 PALETTE|<comma-separated 4-6 dominant colors as plain English, e.g. "cream, charcoal, camel, off-white">
 STRENGTH|<one short paragraph (2 sentences max) on what this wardrobe does well>
 GAPS|<gap1>;<gap2>;<gap3>
-BUY|<2-5 word shopping query>|<one-line reason under 70 chars why this fills a gap>
+BUY|<2-5 word shopping query>|<one-line reason under 70 chars why this fills a gap>|<the same item as a Chinese marketplace seller would title it — seller vocabulary, not a literal translation>
 BUY|...
 BUY|...
 BUY|...

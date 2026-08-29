@@ -45,7 +45,9 @@ data class EbayTryOnCategory(
     val searchQuery: String,
     val items: List<EbayItem> = emptyList(),
     val loading: Boolean = false,
-    val error: String = ""
+    val error: String = "",
+    /** Written by the planner in the same call; empty falls back to translating. */
+    val chineseQuery: String = ""
 )
 
 data class EssentialsCategoryState(
@@ -151,8 +153,8 @@ class TryOnViewModel(
     private val serpApiKey: String = "",
     /** Null falls back to generating the person alongside the clothes each time. */
     private val virtualModels: VirtualModelStore? = null,
-    /** Null keeps the shop tab empty; nothing else depends on it. */
-    private val catalog: com.example.myapplication.data.sourcing.ShoppingCatalog? = null
+    /** Required: a missing catalog is an empty shop tab with no other symptom. */
+    private val catalog: com.example.myapplication.data.sourcing.ShoppingCatalog
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TryOnUiState())
@@ -302,12 +304,12 @@ class TryOnViewModel(
             val rawQuery = listOf(item.color, item.name.ifEmpty { item.category.label }).filter { it.isNotBlank() }.joinToString(" ")
             val query = ensureGenderInQuery(rawQuery)
             Log.d("TryOnVM", "shopSimilar: rawQuery='$rawQuery' → finalQuery='$query' effectiveGender=${_uiState.value.effectiveGender} profileGender=${_uiState.value.profile?.gender}")
-            val combined = catalog?.search(
+            val combined = catalog.search(
                 englishQuery = query,
                 gender = _uiState.value.effectiveGender,
                 categoryHint = item.category,
                 limit = 16
-            ).orEmpty()
+            )
             _uiState.value = _uiState.value.copy(
                 shopSimilarLoading = false,
                 shopSimilarResults = combined,
@@ -375,12 +377,14 @@ class TryOnViewModel(
         val query = ensureGenderInQuery(rawQuery)
         // One source now, and the price on the card is what it costs delivered
         // rather than a sticker in someone else's currency.
-        val items = catalog?.search(
+        val category = _uiState.value.ebayCategories.getOrNull(index)
+        val items = catalog.search(
             englishQuery = query,
             gender = _uiState.value.effectiveGender,
-            categoryHint = slotToCategory(_uiState.value.ebayCategories.getOrNull(index)?.name),
-            limit = 16
-        ).orEmpty()
+            categoryHint = slotToCategory(category?.name),
+            limit = 16,
+            chineseQuery = category?.chineseQuery
+        )
         Log.d("TryOnVM", "category[$index] '$query' -> ${items.size} landed listings")
         updateEbayCategory(index) {
             it.copy(
@@ -757,7 +761,10 @@ class TryOnViewModel(
             EbayTryOnCategory(
                 name = name, reason = parts[1].trim(),
                 fashnCategory = fashnMap[name] ?: "tops",
-                searchQuery = ensureGenderInQuery(parts[2].trim())
+                searchQuery = ensureGenderInQuery(parts[2].trim()),
+                // The plan already wrote this, so the strip does not pay for a
+                // second round trip to translate what the model just said.
+                chineseQuery = parts.getOrNull(3)?.trim().orEmpty()
             )
         }
     }

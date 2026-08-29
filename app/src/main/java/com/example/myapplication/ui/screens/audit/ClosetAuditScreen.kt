@@ -79,6 +79,8 @@ data class AuditReport(
 data class AuditRec(
     val query: String,
     val reason: String,
+    /** Written by the audit itself, so the strip does not pay to translate it again. */
+    val chineseQuery: String = "",
     val products: List<EbayItem> = emptyList(),
     val loading: Boolean = true
 )
@@ -103,7 +105,13 @@ fun parseAuditReport(raw: String): AuditReport? {
             line.startsWith("GAPS|") -> gaps = line.removePrefix("GAPS|").split(";").map { it.trim() }.filter { it.isNotEmpty() }
             line.startsWith("BUY|") -> {
                 val parts = line.removePrefix("BUY|").split("|")
-                if (parts.size >= 2) recs.add(AuditRec(parts[0].trim(), parts[1].trim()))
+                if (parts.size >= 2) recs.add(
+                    AuditRec(
+                        query = parts[0].trim(),
+                        reason = parts[1].trim(),
+                        chineseQuery = parts.getOrNull(2)?.trim().orEmpty()
+                    )
+                )
             }
         }
     }
@@ -170,7 +178,12 @@ fun ClosetAuditScreen(
                 parsed.recommendations.forEachIndexed { idx, rec ->
                     scope.launch {
                         val q = com.example.myapplication.util.ensureGenderInQuery(rec.query, profile?.gender)
-                        val results = catalog.search(q, profile?.gender.orEmpty(), limit = 6)
+                        val results = catalog.search(
+                            englishQuery = q,
+                            gender = profile?.gender.orEmpty(),
+                            limit = 6,
+                            chineseQuery = rec.chineseQuery
+                        )
                         report = report?.copy(
                             recommendations = report!!.recommendations.mapIndexed { i, r ->
                                 if (i == idx) r.copy(products = results, loading = false) else r

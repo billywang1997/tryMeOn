@@ -91,8 +91,8 @@ class OutfitViewModel(
     private val serpService: SerpApiService? = null,
     private val scraperApiKey: String = "",
     private val serpApiKey: String = "",
-    /** Null leaves the shop strip empty; nothing else depends on it. */
-    private val catalog: com.example.myapplication.data.sourcing.ShoppingCatalog? = null
+    /** Required: a missing catalog is an empty shop strip with no other symptom. */
+    private val catalog: com.example.myapplication.data.sourcing.ShoppingCatalog
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(OutfitUiState())
@@ -311,7 +311,7 @@ class OutfitViewModel(
     }
 
     private suspend fun searchOnline(query: String): List<EbayItem> =
-        catalog?.search(query, gender = "", limit = 16).orEmpty()
+        catalog.search(query, gender = "", limit = 16)
 
     private fun matchesQuery(item: ClothingItem, suggestion: String): Boolean {
         val keywords = suggestion.lowercase().split(" ", ",", "-", "_").filter { it.length > 2 }

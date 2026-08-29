@@ -18,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -67,6 +68,7 @@ fun OutfitScreen(
 ) {
     val ebayService   = remember { EbayApiService() }
     val asosService   = remember { AsosApiService() }
+    val outfitContext = LocalContext.current
     val amazonService = remember { ScraperApiService() }
     val serpService   = remember { SerpApiService() }
     val vm: OutfitViewModel = viewModel(factory = object : androidx.lifecycle.ViewModelProvider.Factory {
@@ -75,7 +77,11 @@ fun OutfitScreen(
             OutfitViewModel(
                 wardrobeRepository, profileRepository, claudeApiService, apiKey,
                 ebayService, asosService, amazonService, ebayClientId, ebayClientSecret, rapidApiKey,
-                serpService, scraperApiKey, serpApiKey
+                serpService, scraperApiKey, serpApiKey,
+                catalog = com.example.myapplication.data.sourcing.ShoppingCatalogFactory.create(
+                    outfitContext, claudeApiService, apiKey,
+                    com.example.myapplication.AppSettings(outfitContext).rapidApiKey
+                )
             ) as T
     })
 

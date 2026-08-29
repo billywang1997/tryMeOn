@@ -53,9 +53,28 @@ class ShoppingCatalog(
         englishQuery: String,
         gender: String = "",
         categoryHint: ClothingCategory? = null,
-        limit: Int = 12
+        limit: Int = 12,
+        /**
+         * A Chinese phrase the caller already has, which skips translation.
+         *
+         * Worth passing wherever a model wrote the recommendation in the first
+         * place: it reads Chinese, so asking it for the search phrase in the
+         * same breath turns N+1 chat calls into one. The cost is the parcel
+         * estimate, which then comes from the category preset rather than the
+         * specific garment — a slightly rougher freight figure in exchange for
+         * a strip that loads in seconds instead of half a minute.
+         */
+        chineseQuery: String? = null
     ): List<EbayItem> = runCatching {
-        val query = queryBuilder.build(englishQuery, gender, categoryHint).getOrThrow()
+        val query = chineseQuery?.takeIf { it.isNotBlank() }?.let { cn ->
+            SourcingQuery(
+                chineseQueries = listOf(cn),
+                englishSummary = englishQuery,
+                category = categoryHint ?: ClothingCategory.INNER,
+                parcel = com.example.myapplication.domain.sourcing.ParcelPresets
+                    .forCategory(categoryHint ?: ClothingCategory.INNER)
+            )
+        } ?: queryBuilder.build(englishQuery, gender, categoryHint).getOrThrow()
 
         var listings: List<TaobaoItem> = emptyList()
         outer@ for (phrase in query.chineseQueries) {

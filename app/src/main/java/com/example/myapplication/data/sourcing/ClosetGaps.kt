@@ -4,7 +4,12 @@ import com.example.myapplication.data.remote.ClaudeApiService
 import com.example.myapplication.domain.model.ClothingItem
 
 /** One thing the wardrobe is missing, ready to be searched for. */
-data class ClosetGap(val query: String, val reason: String)
+data class ClosetGap(
+    val query: String,
+    val reason: String,
+    /** Written alongside the suggestion, so searching it costs no extra call. */
+    val chineseQuery: String = ""
+)
 
 /**
  * Reads the wardrobe and proposes what to buy.
@@ -44,7 +49,11 @@ class ClosetGapService(
                 if (parts.firstOrNull()?.uppercase() != "GAP") return@mapNotNull null
                 val query = parts.getOrNull(1)?.trim().orEmpty()
                 if (query.isEmpty()) return@mapNotNull null
-                ClosetGap(query, parts.getOrNull(2)?.trim().orEmpty())
+                ClosetGap(
+                    query = query,
+                    reason = parts.getOrNull(2)?.trim().orEmpty(),
+                    chineseQuery = parts.getOrNull(3)?.trim().orEmpty()
+                )
             }
             .take(4)
             .toList()

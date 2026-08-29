@@ -44,6 +44,7 @@ import com.example.myapplication.ui.theme.Warm
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+import com.example.myapplication.util.OpenLink
 
 data class StyleTwinResult(
     val twins: List<TwinMatch>,
@@ -222,7 +223,7 @@ fun StyleTwinCard(
                                     wishlistRepository = wishlistRepository,
                                     onClick = {
                                         if (item.itemWebUrl.isNotEmpty()) {
-                                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.itemWebUrl)))
+                                            OpenLink.open(context, item.itemWebUrl)
                                         }
                                     }
                                 )

@@ -45,8 +45,8 @@ import com.example.myapplication.domain.model.OutfitScene
 import com.example.myapplication.ui.components.FashionImage
 import com.example.myapplication.ui.screens.tryon.GarmentThumb
 import com.example.myapplication.ui.theme.*
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextAlign
+import com.example.myapplication.util.OpenLink
 
 @Composable
 fun OutfitScreen(
@@ -792,7 +792,7 @@ private fun SourceRow(label: String, content: @Composable () -> Unit) {
 
 @Composable
 private fun OnlineItemThumb(item: EbayItem) {
-    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
     val sourceBg = when (item.source) {
         "ASOS"       -> Color(0xFF111111)
         "The Iconic" -> Color(0xFFD93F87)
@@ -807,7 +807,7 @@ private fun OnlineItemThumb(item: EbayItem) {
         Box(
             modifier = Modifier.size(76.dp).clip(RoundedCornerShape(10.dp))
                 .background(Paper).border(1.dp, Mist, RoundedCornerShape(10.dp))
-                .clickable(enabled = item.itemWebUrl.isNotEmpty()) { uriHandler.openUri(item.itemWebUrl) }
+                .clickable(enabled = item.itemWebUrl.isNotEmpty()) { OpenLink.open(context, item.itemWebUrl) }
         ) {
             androidx.compose.foundation.lazy.LazyRow {} // workaround: use AsyncImage
             coil.compose.AsyncImage(
@@ -836,7 +836,7 @@ private fun OnlineItemThumb(item: EbayItem) {
             maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         if (item.itemWebUrl.isNotEmpty()) {
             Text("Buy →", style = MaterialTheme.typography.labelSmall, color = Warm,
-                modifier = Modifier.clickable { uriHandler.openUri(item.itemWebUrl) })
+                modifier = Modifier.clickable { OpenLink.open(context, item.itemWebUrl) })
         }
     }
 }

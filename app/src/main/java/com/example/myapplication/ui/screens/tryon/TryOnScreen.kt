@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -32,10 +33,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
@@ -60,6 +62,7 @@ import com.example.myapplication.ui.theme.Ink
 import com.example.myapplication.ui.theme.Mist
 import com.example.myapplication.ui.theme.Paper
 import com.example.myapplication.ui.theme.Warm
+import com.example.myapplication.util.OpenLink
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,7 +110,9 @@ fun TryOnScreen(
                 virtualModels = com.example.myapplication.data.tryon.VirtualModelStore(
                     com.example.myapplication.AppSettings(context),
                     claudeApiService,
-                    apiKey
+                    apiKey,
+                    fashn = replicateService,
+                    fashnKey = replicateApiKey
                 )
             ) as T
     })
@@ -464,7 +469,7 @@ private fun EssentialsGarmentSection(state: TryOnUiState, vm: TryOnViewModel) {
                         Text("No results found", style = MaterialTheme.typography.bodySmall, color = Ash)
                     else -> LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(state.shopSimilarResults, key = { it.itemId }) { item ->
-                            val uriHandler = LocalUriHandler.current
+                            val context = LocalContext.current
                             val catLabel = state.shopSimilarItem!!.category.label.lowercase()
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -493,7 +498,7 @@ private fun EssentialsGarmentSection(state: TryOnUiState, vm: TryOnViewModel) {
                                         "Buy →",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Warm,
-                                        modifier = Modifier.clickable { uriHandler.openUri(item.itemWebUrl) }
+                                        modifier = Modifier.clickable { OpenLink.open(context, item.itemWebUrl) }
                                     )
                                 }
                             }
@@ -675,7 +680,7 @@ private fun EbayCategoryRow(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(category.items, key = { it.itemId }) { item ->
-                    val uriHandler = LocalUriHandler.current
+                    val context = LocalContext.current
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -703,7 +708,7 @@ private fun EbayCategoryRow(
                                 "Buy →",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Warm,
-                                modifier = Modifier.clickable { uriHandler.openUri(item.itemWebUrl) }
+                                modifier = Modifier.clickable { OpenLink.open(context, item.itemWebUrl) }
                             )
                         }
                     }
@@ -1049,6 +1054,9 @@ internal fun YourModel(
     building: Boolean,
     onRegenerate: () -> Unit
 ) {
+    var showFull by remember { mutableStateOf(false) }
+    val canOpen = portraitPath.isNotEmpty() && !building
+    if (showFull) FullModelViewer(portraitPath) { showFull = false }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1060,7 +1068,8 @@ internal fun YourModel(
     ) {
         Box(
             modifier = Modifier.width(64.dp).aspectRatio(0.66f)
-                .clip(RoundedCornerShape(8.dp)).background(Paper),
+                .clip(RoundedCornerShape(8.dp)).background(Paper)
+                .clickable(enabled = canOpen) { showFull = true },
             contentAlignment = Alignment.Center
         ) {
             when {
@@ -1082,7 +1091,7 @@ internal fun YourModel(
             Text(
                 when {
                     building -> "Building it from your photo…"
-                    portraitPath.isNotEmpty() -> "Every try-on is this same person"
+                    portraitPath.isNotEmpty() -> "Every try-on is this same person · tap to view"
                     else -> "Built from your photo on the first try-on"
                 },
                 style = MaterialTheme.typography.bodySmall, color = Ash
@@ -1098,6 +1107,35 @@ internal fun YourModel(
                     .clickable(onClick = onRegenerate)
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             )
+        }
+    }
+}
+
+/** Full-screen look at the model portrait; tap anywhere or the close button to dismiss. */
+@Composable
+private fun FullModelViewer(portraitPath: String, onDismiss: () -> Unit) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.92f))
+                .clickable(onClick = onDismiss)
+        ) {
+            FashionImage(
+                model = portraitPath,
+                contentDescription = "Your model, full size",
+                modifier = Modifier.fillMaxSize().padding(16.dp),
+                contentScale = ContentScale.Fit
+            )
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+            }
         }
     }
 }

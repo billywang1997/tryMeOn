@@ -50,6 +50,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.util.Locale
+import com.example.myapplication.util.OpenLink
 
 @Composable
 fun WishlistScreen(
@@ -126,7 +127,7 @@ fun WishlistScreen(
                         item = wishItem,
                         onClick = {
                             if (wishItem.itemWebUrl.isNotEmpty()) {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(wishItem.itemWebUrl)))
+                                OpenLink.open(context, wishItem.itemWebUrl)
                             }
                         },
                         onRemove = { scope.launch { repository.remove(wishItem.id) } }

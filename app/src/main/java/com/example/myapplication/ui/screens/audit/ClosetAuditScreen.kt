@@ -67,6 +67,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import com.example.myapplication.util.OpenLink
 
 data class AuditReport(
     val score: Int,
@@ -276,7 +277,7 @@ fun ClosetAuditScreen(
                     onSourceIt = onSourceIt,
                     onProductClick = { item ->
                         if (item.itemWebUrl.isNotEmpty()) {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.itemWebUrl)))
+                            OpenLink.open(context, item.itemWebUrl)
                         }
                     }
                 )

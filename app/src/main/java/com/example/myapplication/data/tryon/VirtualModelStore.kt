@@ -22,7 +22,10 @@ import kotlinx.coroutines.sync.withLock
 class VirtualModelStore(
     private val settings: AppSettings,
     private val claude: ClaudeApiService,
-    private val apiKey: String
+    private val apiKey: String,
+    /** Preferred when keyed: purpose-built for face photo to full-body model. */
+    private val fashn: com.example.myapplication.data.remote.ReplicateApiService? = null,
+    private val fashnKey: String = ""
 ) {
     private val lock = Mutex()
 
@@ -55,9 +58,20 @@ class VirtualModelStore(
     }
 
     private suspend fun generate(profile: UserProfile?, facePhotoPath: String): VirtualModel? {
-        val path = claude.generateModelPortrait(apiKey, facePhotoPath, profile)
-            .onFailure { Log.w(TAG, "portrait failed: ${it.message}") }
-            .getOrNull() ?: return null
+        // FASHN's face-to-model exists for exactly this and holds a likeness far
+        // better than a general image editor, which regenerates the person
+        // rather than preserving them — the reason faces came back wrong.
+        val viaFashn = if (fashn != null && fashnKey.isNotBlank()) {
+            fashn.faceToModel(fashnKey, facePhotoPath)
+                .onFailure { Log.w(TAG, "face-to-model failed, falling back: ${it.message}") }
+                .getOrNull()
+        } else null
+
+        val path = viaFashn
+            ?: claude.generateModelPortrait(apiKey, facePhotoPath, profile)
+                .onFailure { Log.w(TAG, "portrait failed: ${it.message}") }
+                .getOrNull()
+            ?: return null
 
         val model = VirtualModel(
             imagePath = path,

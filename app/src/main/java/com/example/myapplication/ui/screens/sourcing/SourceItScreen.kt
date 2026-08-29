@@ -60,6 +60,7 @@ import com.example.myapplication.ui.theme.Sage
 import com.example.myapplication.ui.theme.Warm
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import com.example.myapplication.util.OpenLink
 
 /** Seeds for a first-time user, chosen to show the translation doing real work. */
 private val EXAMPLES = listOf("cropped linen blazer", "wide leg trousers", "chunky leather loafers")
@@ -527,7 +528,7 @@ internal fun ListingCard(
                     }
                     item.orderUrl?.let { url ->
                         Button(
-                            onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
+                            onClick = { OpenLink.open(context, url) },
                             modifier = Modifier.weight(1f).height(46.dp),
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Ink)

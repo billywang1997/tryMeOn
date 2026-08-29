@@ -82,6 +82,16 @@ data class ImageGenerationResponse(
 )
 
 // --- Service ---
+/**
+ * Image model for every render.
+ *
+ * gpt-image-2 is cheaper at the 1024x1536 portrait size this app uses, returns
+ * faster, and holds a likeness at least as well in side-by-side tests.
+ * gpt-image-1 is also being retired on 2026-10-23, so this is not optional for
+ * much longer.
+ */
+private const val IMAGE_MODEL = "gpt-image-2"
+
 class ClaudeApiService(private val context: Context) {
 
     private val httpClient by lazy {
@@ -731,8 +741,9 @@ Provide exactly 6 BUY suggestions. Each should be high-impact for this specific 
         try {
             val prompt = "Full-length studio portrait of one person, head to toe, " +
                 "facing the camera in a relaxed neutral stance. " +
-                "image[0] is the reference — keep this person's face, hair and skin tone exactly as shown. " +
-                buildBodyDesc(profile) +
+                "image[0] is the reference — keep this person's face, hair, skin tone and " +
+                "apparent sex exactly as shown; the photo, not this text, says who they are. " +
+                buildProportionsOnly(profile) +
                 "Dress them in plain fitted neutral grey underlayers with no pattern, branding or accessories. " +
                 "Plain light grey seamless background, soft even studio lighting, sharp focus, no props, no text."
 
@@ -740,7 +751,7 @@ Provide exactly 6 BUY suggestions. Each should be high-impact for this specific 
                 ?: return@withContext Result.failure(Exception("Unable to read the reference photo"))
 
             val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
-                .addFormDataPart("model", "gpt-image-1")
+                .addFormDataPart("model", IMAGE_MODEL)
                 .addFormDataPart("prompt", prompt)
                 .addFormDataPart("n", "1")
                 .addFormDataPart("size", "1024x1536")
@@ -793,7 +804,9 @@ Provide exactly 6 BUY suggestions. Each should be high-impact for this specific 
         modelPortraitPath: String? = null
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
-            val bodyDesc = buildBodyDesc(profile)
+            // Photo-referenced: describe proportions, never identity. See
+            // buildProportionsOnly for why asserting the latter breaks likeness.
+            val bodyDesc = buildProportionsOnly(profile)
             val portrait = modelPortraitPath?.takeIf { it.isNotBlank() && File(it).exists() }
             val identityPath = portrait ?: faceImagePath
             // A portrait already shows the whole body, so a separate reference
@@ -834,7 +847,7 @@ Provide exactly 6 BUY suggestions. Each should be high-impact for this specific 
                 "Full-length shot head to toe. Clean studio background, fashion photography lighting."
 
             val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
-                .addFormDataPart("model", "gpt-image-1")
+                .addFormDataPart("model", IMAGE_MODEL)
                 .addFormDataPart("prompt", prompt)
                 .addFormDataPart("n", "1")
                 .addFormDataPart("size", "1024x1536")
@@ -892,6 +905,16 @@ Provide exactly 6 BUY suggestions. Each should be high-impact for this specific 
     }
 
     // Converts height + weight into descriptive fashion terms gpt-image-1 responds to.
+    /**
+     * Build description for a render that has no reference photo.
+     *
+     * Never use this alongside one. The gender here comes from a profile field
+     * or an inference, and when it disagrees with the photo the model follows
+     * the words: a man's photo with "the model is a woman" comes back as a
+     * woman's body wearing a distorted version of his face. Even when it
+     * agrees, asserting identity in text competes with the image for no gain —
+     * the photo already says what this person looks like.
+     */
     private fun buildBodyDesc(profile: UserProfile?): String {
         if (profile == null || profile.height <= 0) return ""
         val genderWord = when (profile.gender.trim().lowercase()) {
@@ -924,6 +947,40 @@ Provide exactly 6 BUY suggestions. Each should be high-impact for this specific 
     }
 
     /**
+     * Height and build only, for renders that carry a reference photo.
+     *
+     * These are the two things a head-and-shoulders photo genuinely cannot
+     * convey. Everything else — who this is, and what they look like — is
+     * already in the image and is better left there.
+     */
+    private fun buildProportionsOnly(profile: UserProfile?): String {
+        if (profile == null || profile.height <= 0) return ""
+        val heightDesc = when {
+            profile.height < 155 -> "petite"
+            profile.height < 163 -> "short"
+            profile.height < 170 -> "average height"
+            profile.height < 178 -> "tall"
+            else                 -> "very tall"
+        }
+        val buildDesc = if (profile.weight > 0) {
+            val bmi = profile.weight.toFloat() / ((profile.height / 100f) * (profile.height / 100f))
+            when {
+                bmi < 17.5 -> "very slim"
+                bmi < 20   -> "slim"
+                bmi < 23   -> "lean"
+                bmi < 25   -> "average"
+                bmi < 27.5 -> "slightly fuller"
+                bmi < 30   -> "fuller figure"
+                else       -> "plus-size"
+            }
+        } else ""
+        val desc = listOfNotNull(heightDesc.takeIf { it.isNotEmpty() }, buildDesc.takeIf { it.isNotEmpty() })
+            .joinToString(", ")
+        if (desc.isEmpty()) return ""
+        return "Keep the proportions of the reference; they are $desc. "
+    }
+
+    /**
      * Generate a fashion editorial image based on the outfit suggestion.
      * Uses DALL-E 3 with a prompt derived from the scene + AI suggestion text.
      * Returns a local cache file path on success.
@@ -936,7 +993,10 @@ Provide exactly 6 BUY suggestions. Each should be high-impact for this specific 
         faceImagePath: String? = null
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
-            val bodyDesc = buildBodyDesc(profile)
+            // Same rule: when a face is supplied the photo defines the person,
+            // and asserting it in text as well is what breaks the likeness.
+            val bodyDesc = if (faceImagePath.isNullOrBlank()) buildBodyDesc(profile)
+                           else buildProportionsOnly(profile)
             val snippetWords = suggestion.replace("\n", " ").split(" ").take(40).joinToString(" ")
             val outFile = java.io.File(context.cacheDir, "outfit_board_${System.currentTimeMillis()}.png")
 
@@ -951,7 +1011,7 @@ Provide exactly 6 BUY suggestions. Each should be high-impact for this specific 
                     "Clean studio background, fashion photography lighting, high fashion magazine style."
 
                 val builder = okhttp3.MultipartBody.Builder().setType(okhttp3.MultipartBody.FORM)
-                    .addFormDataPart("model", "gpt-image-1")
+                    .addFormDataPart("model", IMAGE_MODEL)
                     .addFormDataPart("prompt", prompt)
                     .addFormDataPart("n", "1")
                     .addFormDataPart("size", "1024x1536")

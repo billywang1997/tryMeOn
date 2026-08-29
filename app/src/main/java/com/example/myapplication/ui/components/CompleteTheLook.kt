@@ -53,6 +53,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import java.io.File
+import com.example.myapplication.util.OpenLink
 
 data class MissingPiece(
     val category: ClothingCategory?,
@@ -246,7 +247,7 @@ fun CompleteTheLookSheet(
                         wishlistRepository = wishlistRepository,
                         onProductClick = { item ->
                             if (item.itemWebUrl.isNotEmpty()) {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.itemWebUrl)))
+                                OpenLink.open(context, item.itemWebUrl)
                             }
                         }
                     )

@@ -59,6 +59,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import org.json.JSONObject
+import com.example.myapplication.util.OpenLink
 
 @Composable
 fun ProfileScreen(
@@ -1012,7 +1013,7 @@ private fun LookItemChip(item: ClothingItem, context: android.content.Context) {
             // Secondhand item with original listing URL
             OutlinedButton(
                 onClick = {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.notes)))
+                    OpenLink.open(context, item.notes)
                 },
                 modifier = Modifier.fillMaxWidth().height(28.dp),
                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),

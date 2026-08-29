@@ -78,14 +78,14 @@ class VirtualModelLiveTest {
         assertTrue("subject photo not written", subject.length() > 10_000)
 
         val claude = ClaudeApiService(context)
+        // Deliberately contradicts the synthesised subject. A profile field can
+        // disagree with the photo — wrong at onboarding, or wrongly inferred —
+        // and the render must follow the photo, not the field.
         val profile = UserProfile(gender = "Female", height = 168, weight = 58)
 
         println("=== 2. virtual model ===")
-        val kept = File(context.filesDir, "virtual_model.png")
-        val portrait = if (kept.length() > 10_000) {
-            println("reusing the kept portrait — which is the point of keeping it")
-            Result.success(kept.absolutePath)
-        } else claude.generateModelPortrait(apiKey, subject.absolutePath, profile)
+        // Always regenerate here: this test exists to check the portrait itself.
+        val portrait = claude.generateModelPortrait(apiKey, subject.absolutePath, profile)
         portrait.exceptionOrNull()?.let { println("FAILED: ${it.message}") }
         assertTrue("portrait failed: ${portrait.exceptionOrNull()?.message}", portrait.isSuccess)
 

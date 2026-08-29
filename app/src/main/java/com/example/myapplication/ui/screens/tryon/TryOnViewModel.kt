@@ -626,11 +626,18 @@ class TryOnViewModel(
                 }
             }
 
-            _uiState.value = _uiState.value.copy(loadingStep = "Generating front view…")
-            val front = claudeService.generateTryOnImage(
-                openAiKey, userImagePath, garments, state.profile, "front", bodyRef,
-                modelPortraitPath = portrait?.imagePath
-            )
+            _uiState.value = _uiState.value.copy(loadingStep = "Dressing your model…")
+
+            // FASHN transfers a garment onto a given person instead of drawing a
+            // new one, so the face survives. It dresses one item at a time, which
+            // suits layering: each step starts from the previous result, and the
+            // person is carried through the whole chain.
+            val base = portrait?.imagePath ?: userImagePath
+            val front = dressWithFashn(base, garments)
+                ?: claudeService.generateTryOnImage(
+                    openAiKey, userImagePath, garments, state.profile, "front", bodyRef,
+                    modelPortraitPath = portrait?.imagePath
+                )
             if (front.isFailure) {
                 _uiState.value = _uiState.value.copy(isLoading = false, loadingStep = "", error = front.exceptionOrNull()?.message ?: "Generation failed")
                 return@launch
@@ -640,14 +647,53 @@ class TryOnViewModel(
                 isLoading = false, loadingStep = "", generatingViews = true
             )
 
-            val views = _uiState.value.resultViews.toMutableList()
-            val side = claudeService.generateTryOnImage(
-                openAiKey, userImagePath, garments, state.profile, "side", bodyRef,
-                modelPortraitPath = portrait?.imagePath
-            )
-            if (side.isSuccess) { views.add(side.getOrThrow()); _uiState.value = _uiState.value.copy(resultViews = views.toList()) }
+            // A second angle can only come from regenerating the person, which is
+            // what loses the likeness. One faithful view beats two wrong ones, so
+            // the extra angle is offered only when the faithful path was unavailable.
+            if (!usedFashn) {
+                val views = _uiState.value.resultViews.toMutableList()
+                val side = claudeService.generateTryOnImage(
+                    openAiKey, userImagePath, garments, state.profile, "side", bodyRef,
+                    modelPortraitPath = portrait?.imagePath
+                )
+                if (side.isSuccess) {
+                    views.add(side.getOrThrow())
+                    _uiState.value = _uiState.value.copy(resultViews = views.toList())
+                }
+            }
             _uiState.value = _uiState.value.copy(generatingViews = false)
         }
+    }
+
+    /** Tracks which path produced the current result, so angles are only offered when they are honest. */
+    private var usedFashn = false
+
+    /**
+     * Dress [personPath] in each garment in turn, or null when FASHN is not
+     * available and the caller should fall back.
+     */
+    private suspend fun dressWithFashn(
+        personPath: String,
+        garments: List<Pair<String, String>>
+    ): Result<String>? {
+        usedFashn = false
+        if (replicateKey.isBlank() || garments.isEmpty()) return null
+
+        var current = personPath
+        for ((index, garment) in garments.withIndex()) {
+            val (path, label) = garment
+            _uiState.value = _uiState.value.copy(
+                loadingStep = "Dressing your model… ${index + 1}/${garments.size}"
+            )
+            val step = replicateService.tryOn(replicateKey, current, path, label)
+            if (step.isFailure) {
+                Log.w("TryOnVM", "FASHN step ${index + 1} failed: ${step.exceptionOrNull()?.message}")
+                return null
+            }
+            current = step.getOrThrow()
+        }
+        usedFashn = true
+        return Result.success(current)
     }
 
     private suspend fun resolveImagePath(path: String): String {

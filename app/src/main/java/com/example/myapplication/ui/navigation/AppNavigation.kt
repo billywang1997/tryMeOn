@@ -225,7 +225,9 @@ fun AppNavigation(
                         ),
                         queryBuilder = com.example.myapplication.data.sourcing.ClaudeSourcingQueryBuilder(
                             service = claudeApiService,
-                            apiKey = apiKey
+                            apiKey = apiKey,
+                            cache = com.example.myapplication.data.sourcing.SourcingReplyCache(),
+                            store = com.example.myapplication.data.sourcing.PrefsSourcingReplyStore(sourceContext)
                         ),
                         fxRates = com.example.myapplication.data.sourcing.FxRateRepository(
                             com.example.myapplication.AppSettings(sourceContext)

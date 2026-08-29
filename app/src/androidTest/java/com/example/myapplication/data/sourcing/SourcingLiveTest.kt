@@ -7,6 +7,7 @@ import com.example.myapplication.data.remote.TaobaoApiService
 import com.example.myapplication.data.remote.TaobaoUnionApiService
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -99,5 +100,38 @@ class SourcingLiveTest {
             it.listings.take(3).forEach { l -> println("  ¥${l.priceCny}  ${l.listing.title.take(40)}") }
         }.onFailure { println("FAILED: ${it.message}") }
         assertTrue(result.isSuccess)
+    }
+
+    @Test
+    fun theSecondSearchOfAPhraseSkipsTheModel() = runBlocking {
+        assumeTrue(openAiKey.isNotBlank())
+
+        val cache = SourcingReplyCache()
+        val builder = ClaudeSourcingQueryBuilder(
+            ClaudeApiService(InstrumentationRegistry.getInstrumentation().targetContext),
+            openAiKey,
+            cache = cache
+        )
+
+        val phrase = "ribbed cotton tank top"
+        val firstStart = System.currentTimeMillis()
+        val first = builder.build(phrase, gender = "Female")
+        val firstMs = System.currentTimeMillis() - firstStart
+        assertTrue("first call failed: ${first.exceptionOrNull()?.message}", first.isSuccess)
+
+        val secondStart = System.currentTimeMillis()
+        val second = builder.build(phrase, gender = "Female")
+        val secondMs = System.currentTimeMillis() - secondStart
+
+        println("=== translation cache ===")
+        println("first  : ${firstMs} ms  ${first.getOrThrow().chineseQueries}")
+        println("second : ${secondMs} ms  ${second.getOrThrow().chineseQueries}")
+
+        assertEquals(
+            "a cache hit must return the same translation",
+            first.getOrThrow().chineseQueries, second.getOrThrow().chineseQueries
+        )
+        // A real chat call cannot come back in a few milliseconds.
+        assertTrue("second call took ${secondMs} ms — it did not hit the cache", secondMs < 200)
     }
 }

@@ -17,8 +17,15 @@ import com.example.myapplication.domain.model.ClothingCategory
 class ClaudeSourcingQueryBuilder(
     private val service: ClaudeApiService,
     private val apiKey: String,
-    private val quantity: Int = 1
+    private val quantity: Int = 1,
+    /** Null means every search pays for a fresh translation. */
+    private val cache: SourcingReplyCache? = null,
+    private val store: SourcingReplyStore? = null
 ) : SourcingQueryBuilder {
+
+    init {
+        store?.let { cache?.restore(it.load()) }
+    }
 
     override suspend fun build(
         englishDescription: String,
@@ -28,11 +35,23 @@ class ClaudeSourcingQueryBuilder(
         if (englishDescription.isBlank()) {
             return Result.failure(IllegalArgumentException("Describe the item first"))
         }
+        val key = cache?.key(englishDescription, gender, categoryHint)
         return runCatching {
-            val raw = service.sourcingQuery(apiKey, englishDescription, gender, categoryHint?.name.orEmpty())
-            Log.d(TAG, "raw sourcing reply: ${raw.take(300)}")
-            SourcingQueryParser.parse(raw, categoryHint, quantity)
+            val cached = key?.let { cache?.get(it) }
+            val raw = cached ?: service.sourcingQuery(
+                apiKey, englishDescription, gender, categoryHint?.name.orEmpty()
+            )
+            Log.d(TAG, if (cached != null) "cache hit for '$englishDescription'" else "raw reply: ${raw.take(200)}")
+
+            // Parse before storing, so a reply that cannot be used is not kept.
+            val parsed = SourcingQueryParser.parse(raw, categoryHint, quantity)
                 ?: error("Could not turn that into a Taobao search")
+
+            if (cached == null && key != null) {
+                cache?.put(key, raw)
+                cache?.let { c -> store?.save(c.snapshot()) }
+            }
+            parsed
         }
     }
 

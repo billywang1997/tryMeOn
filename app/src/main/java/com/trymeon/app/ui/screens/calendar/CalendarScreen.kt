@@ -57,7 +57,7 @@ fun CalendarScreen(
         topBar = {
             TopAppBar(
                 title = { Text("OUTFIT CALENDAR", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Light) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = White)
             )
         },
@@ -77,7 +77,7 @@ fun CalendarScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { vm.prevMonth() }) {
-                    Icon(Icons.Default.ChevronLeft, null, tint = Ink)
+                    Icon(Icons.Default.ChevronLeft, "Previous", tint = Ink)
                 }
                 Text(
                     "${state.currentMonth.year} / ${state.currentMonth.monthValue}",
@@ -86,7 +86,7 @@ fun CalendarScreen(
                     color = Ink
                 )
                 IconButton(onClick = { vm.nextMonth() }) {
-                    Icon(Icons.Default.ChevronRight, null, tint = Ink)
+                    Icon(Icons.Default.ChevronRight, "Next", tint = Ink)
                 }
             }
 
@@ -254,7 +254,7 @@ private fun DayLogSheet(
             Text(date, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Light)
             if (log != null) {
                 IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, null, tint = Ash)
+                    Icon(Icons.Default.Delete, "Delete", tint = Ash)
                 }
             }
         }

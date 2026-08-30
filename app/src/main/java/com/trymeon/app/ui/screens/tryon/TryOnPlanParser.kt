@@ -81,9 +81,21 @@ internal object TryOnPlanParser {
             return null to line.substring(4)
         }
         val colon = line.indexOf(':')
-        if (colon <= 0) return null
-        val head = line.substring(0, colon).trim().lowercase()
-        if (head !in PREFIXES) return null
-        return head to line.substring(colon + 1)
+        if (colon > 0) {
+            val head = line.substring(0, colon).trim().lowercase()
+            if (head in PREFIXES) return head to line.substring(colon + 1)
+        }
+        // A third shape, seen live: "TOP|reason|english|chinese" — the category
+        // as the first pipe field and no colon anywhere. It is the format the
+        // closet-gap and complete-the-look prompts use, and the model carries it
+        // across. Three shapes for one instruction is what asking a model for a
+        // format actually gets you, so the parser accepts all of them rather
+        // than the prompt being rewritten a fourth time.
+        val bar = line.indexOf('|')
+        if (bar > 0) {
+            val head = line.substring(0, bar).trim().lowercase()
+            if (head in PREFIXES) return head to line.substring(bar + 1)
+        }
+        return null
     }
 }

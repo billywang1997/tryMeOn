@@ -132,7 +132,7 @@ fun StreakScreen(
 
     Column(modifier = Modifier.fillMaxSize().background(Color.White).verticalScroll(rememberScrollState())) {
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Ink) }
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Ink) }
             Column(modifier = Modifier.weight(1f)) {
                 Text("STREAKS", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Light, color = Ink)
                 Text("Wear different, every day", style = MaterialTheme.typography.labelSmall, color = Ash)

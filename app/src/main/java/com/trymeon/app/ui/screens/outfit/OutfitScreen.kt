@@ -112,7 +112,7 @@ fun OutfitScreen(
                 )
                 Spacer(Modifier.width(8.dp))
                 IconButton(onClick = onNavigateToCalendar, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.CalendarMonth, null, tint = Ash, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.CalendarMonth, "Outfit calendar", tint = Ash, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -495,7 +495,7 @@ private fun EssentialsHintBanner(
             Text("Essentials →", style = MaterialTheme.typography.labelSmall, color = Warm)
         }
         IconButton(onClick = onDismiss, modifier = Modifier.size(20.dp)) {
-            Icon(Icons.Default.Close, null, tint = Ash, modifier = Modifier.size(14.dp))
+            Icon(Icons.Default.Close, "Close", tint = Ash, modifier = Modifier.size(14.dp))
         }
     }
 }
@@ -938,7 +938,7 @@ private fun WeatherCard(
                 }
                 Row {
                     IconButton(onClick = onRefresh, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Refresh, null, tint = Ash, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Refresh, "Refresh", tint = Ash, modifier = Modifier.size(16.dp))
                     }
                     TextButton(onClick = onEditCity) {
                         Text("Change city", style = MaterialTheme.typography.labelSmall, color = Ash)

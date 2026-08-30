@@ -58,7 +58,7 @@ fun RatingScreen(
                         Text("Outfit Rating", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Light)
                     }
                 },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = White)
             )
         },

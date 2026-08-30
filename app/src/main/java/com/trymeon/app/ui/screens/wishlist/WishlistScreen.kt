@@ -70,7 +70,7 @@ fun WishlistScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Ink)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Ink)
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text("WISHLIST", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Light, color = Ink)

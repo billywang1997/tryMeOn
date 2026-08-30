@@ -114,4 +114,29 @@ class TryOnPlanParserTest {
             )
         }
     }
+
+    @Test
+    fun `the third shape the model used, with no colon at all`() {
+        // Live output from a try-on plan run. The category is the first pipe
+        // field — the format the closet-gap prompt asks for — and every line was
+        // dropped, so the screen had nothing to show.
+        val plan = """
+            TOP|Pairs with black cargo pants, adds layering: 3 outfits|men's oversized graphic hoodie, premium cotton, black|男士宽松印花连帽衫 高级棉 黑色
+            BOTTOMS|Works with black oversized crew tee, boxy fit: 2 outfits|men's wide-leg trousers, wool blend, charcoal|男士宽松羊毛混纺长裤 深灰色
+            SHOES|Complements any outfit, boosts height: 4 outfits|men's high-top sneakers, leather, all-black|男士高帮运动鞋 皮革 全黑
+        """.trimIndent()
+
+        val got = parse(plan)
+        assertEquals(3, got.size)
+        assertEquals("men's oversized graphic hoodie, premium cotton, black", got[0].searchQuery)
+        assertEquals("tops", got[0].fashnCategory)
+        // A reason containing a colon must not be mistaken for the separator.
+        assertEquals("bottoms", got[1].fashnCategory)
+        assertEquals("男士高帮运动鞋 皮革 全黑", got[2].chineseQuery)
+    }
+
+    @Test
+    fun `a pipe line that is not a category is still ignored`() {
+        assertEquals(0, parse("Note|these are suggestions|nothing more").size)
+    }
 }

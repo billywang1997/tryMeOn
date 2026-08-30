@@ -17,6 +17,12 @@ object NotificationScheduler {
     private const val PRICE_WORK = "wardrobe_price_watch"
     private const val STREAK_WORK = "wardrobe_streak_reminder"
 
+    /** Morning: early enough to act on a price before it moves, late enough to be awake. */
+    private val PRICE_ALERT_HOUR = LocalTime.of(9, 0)
+
+    /** Evening: after the day it is asking you to log. */
+    private val STREAK_REMINDER_HOUR = LocalTime.of(20, 0)
+
     fun apply(context: Context) {
         val settings = AppSettings(context)
         val wm = WorkManager.getInstance(context)
@@ -28,7 +34,12 @@ object NotificationScheduler {
                         .setRequiredNetworkType(NetworkType.CONNECTED)
                         .build()
                 )
-                .setInitialDelay(Duration.ofHours(6))
+                // Anchored to a civil hour, not to whenever the app happened to
+                // be installed. Six hours after a nine o'clock install is three
+                // in the morning, and WorkManager keeps that offset for good —
+                // so one unlucky install time meant a price alert at 3am every
+                // day after.
+                .setInitialDelay(initialDelayUntil(PRICE_ALERT_HOUR))
                 .build()
             wm.enqueueUniquePeriodicWork(PRICE_WORK, ExistingPeriodicWorkPolicy.KEEP, req)
         } else {
@@ -37,7 +48,7 @@ object NotificationScheduler {
 
         if (settings.notifyStreakReminder) {
             val req = PeriodicWorkRequestBuilder<StreakReminderWorker>(Duration.ofHours(24))
-                .setInitialDelay(initialDelayUntil(LocalTime.of(20, 0)))
+                .setInitialDelay(initialDelayUntil(STREAK_REMINDER_HOUR))
                 .build()
             wm.enqueueUniquePeriodicWork(STREAK_WORK, ExistingPeriodicWorkPolicy.KEEP, req)
         } else {
@@ -53,8 +64,9 @@ object NotificationScheduler {
         apply(context)
     }
 
-    private fun initialDelayUntil(time: LocalTime): Duration {
-        val now = LocalDateTime.now()
+    /** How long until the next [time] in the device's own timezone. */
+    @androidx.annotation.VisibleForTesting
+    internal fun initialDelayUntil(time: LocalTime, now: LocalDateTime = LocalDateTime.now()): Duration {
         var next = now.toLocalDate().atTime(time)
         if (!next.isAfter(now)) next = next.plusDays(1)
         return Duration.ofMillis(ChronoUnit.MILLIS.between(now, next))

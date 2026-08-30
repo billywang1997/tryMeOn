@@ -38,6 +38,11 @@ import com.trymeon.app.ui.theme.Warm
  * a shopping surface, silence is better than a strip that says the community
  * is empty. The one exception is the wearer's own tab, where [emptyHint]
  * invites the first share.
+ *
+ * A profile with no height or no gender is a different silence, and worth
+ * breaking: the feature is not empty for them, it cannot run at all, and the
+ * two numbers it needs are the ones onboarding lets people skip. Saying so is
+ * both the explanation and the thing that turns it on.
  */
 @Composable
 fun FitAlikeStrip(
@@ -47,6 +52,12 @@ fun FitAlikeStrip(
     keywords: List<String> = emptyList(),
     title: String = "PEOPLE YOUR SIZE",
     emptyHint: String? = null,
+    /**
+     * Where to go to fill in the numbers this needs. Null keeps the strip
+     * silent for a profile that cannot match, which is right on a surface with
+     * nowhere to send them.
+     */
+    onAddMeasurements: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val matches = remember(looks, profile, category, keywords) {
@@ -55,8 +66,21 @@ fun FitAlikeStrip(
     var open by remember { mutableStateOf<FitLook?>(null) }
 
     if (matches.isEmpty()) {
-        if (emptyHint != null && profile != null && profile.height > 0) {
-            Text(emptyHint, style = MaterialTheme.typography.bodySmall, color = Ash, modifier = modifier)
+        val canMatch = profile != null && profile.height > 0 && profile.gender.isNotBlank()
+        val text = when {
+            !canMatch && onAddMeasurements != null ->
+                "Add your height to see this on people your size"
+            emptyHint != null && canMatch -> emptyHint
+            else -> null
+        }
+        text?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = Ash,
+                modifier = if (!canMatch && onAddMeasurements != null)
+                    modifier.clickable { onAddMeasurements() } else modifier
+            )
         }
         return
     }

@@ -39,6 +39,21 @@ service cloud.firestore {
                     && resource.data.sellerUid == request.auth.uid;
     }
 
+    // Shared fit looks: a render or photo with the wearer's own height and
+    // weight, published one at a time by that wearer. Browsable by everyone
+    // signed in; only the wearer may post, change or remove one, and only as
+    // themselves.
+    match /fit_looks/{id} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+                    && request.resource.data.uid == request.auth.uid;
+      allow update: if request.auth != null
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null
+                    && resource.data.uid == request.auth.uid;
+    }
+
     // Relay spend counters are written only by the relay function through the
     // Admin SDK, which bypasses these rules. A client that can write here can
     // reset its own daily cap.

@@ -54,6 +54,15 @@ service firebase.storage {
       allow delete: if isOwner(uid);
     }
 
+    // Shared fit looks. Written only by the wearer; read by everyone through
+    // the tokenised download URL kept in the Firestore document, the same
+    // way marketplace images travel.
+    match /fit_looks/{uid}/{file} {
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid) && isUnder(15);
+      allow delete: if isOwner(uid);
+    }
+
     // Anything else, including a path a future feature adds without a rule.
     // Denied is the safe way to find out.
     match /{path=**} {

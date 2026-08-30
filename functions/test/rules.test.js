@@ -150,3 +150,59 @@ test("collections the app does not use are closed", async () => {
     await assertFails(setDoc(doc(alice(), p.includes("/") ? p : `${p}/x`), { v: 1 }));
   }
 });
+
+// ── Shared fit looks ────────────────────────────────────────────────────────
+//
+// A fit look is a photograph of a person together with their height, weight and
+// the size they took. It is the most personal thing the app stores, and unlike
+// everything else here it is meant to be read by strangers — that is the whole
+// feature. So the line to hold is not "who can read" but "who can write, and as
+// whom": nobody may publish a body under someone else's name, or edit or delete
+// what another person published about theirs.
+
+const aliceLook = { uid: ALICE, imageUrl: "https://example/a.jpg", heightCm: 180, weightKg: 75, size: "L" };
+
+test("anyone signed in can browse fit looks — that is the point of them", async () => {
+  await env.withSecurityRulesDisabled((c) =>
+    setDoc(doc(c.firestore(), "fit_looks/l1"), aliceLook)
+  );
+  await assertSucceeds(getDoc(doc(bob(), "fit_looks/l1")));
+});
+
+test("a signed-out caller cannot browse them", async () => {
+  await env.withSecurityRulesDisabled((c) =>
+    setDoc(doc(c.firestore(), "fit_looks/l1"), aliceLook)
+  );
+  await assertFails(getDoc(doc(stranger(), "fit_looks/l1")));
+});
+
+test("a look is published as yourself, or not at all", async () => {
+  await assertSucceeds(setDoc(doc(alice(), "fit_looks/mine"), aliceLook));
+  // Publishing someone else's body under their name is the attack this stops.
+  await assertFails(setDoc(doc(bob(), "fit_looks/forged"), aliceLook));
+});
+
+test("nobody can edit the look another person published", async () => {
+  await env.withSecurityRulesDisabled((c) =>
+    setDoc(doc(c.firestore(), "fit_looks/l1"), aliceLook)
+  );
+  await assertFails(updateDoc(doc(bob(), "fit_looks/l1"), { heightCm: 150 }));
+  await assertSucceeds(updateDoc(doc(alice(), "fit_looks/l1"), { heightCm: 181 }));
+});
+
+test("an edit cannot hand a look to someone else", async () => {
+  // The same reassignment gap that market listings had: an owner check on the
+  // existing document alone lets the owner rewrite uid and walk away with it.
+  await env.withSecurityRulesDisabled((c) =>
+    setDoc(doc(c.firestore(), "fit_looks/l1"), aliceLook)
+  );
+  await assertFails(updateDoc(doc(alice(), "fit_looks/l1"), { uid: BOB }));
+});
+
+test("only the wearer can take their look down", async () => {
+  await env.withSecurityRulesDisabled((c) =>
+    setDoc(doc(c.firestore(), "fit_looks/l1"), aliceLook)
+  );
+  await assertFails(deleteDoc(doc(bob(), "fit_looks/l1")));
+  await assertSucceeds(deleteDoc(doc(alice(), "fit_looks/l1")));
+});

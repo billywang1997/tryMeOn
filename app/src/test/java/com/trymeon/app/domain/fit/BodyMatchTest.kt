@@ -71,4 +71,19 @@ class BodyMatchTest {
         assertTrue(BodyMatch.forProfile(null, listOf(look())).isEmpty())
         assertTrue(BodyMatch.forProfile(UserProfile(gender = "Male"), listOf(look())).isEmpty())
     }
+
+    @Test
+    fun `a profile with no height matches nothing`() {
+        // Onboarding lets people skip the body step, so this is a common state
+        // rather than an edge one, and it is why the strip has to explain its
+        // own silence instead of just disappearing.
+        val noHeight = UserProfile(gender = "Male", height = 0, weight = 60)
+        assertEquals(emptyList<BodyMatch.Match>(), BodyMatch.forProfile(noHeight, listOf(look())))
+    }
+
+    @Test
+    fun `a profile with no gender matches nothing`() {
+        val noGender = UserProfile(gender = "", height = 170, weight = 60)
+        assertEquals(emptyList<BodyMatch.Match>(), BodyMatch.forProfile(noGender, listOf(look())))
+    }
 }

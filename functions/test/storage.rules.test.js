@@ -107,3 +107,40 @@ test("an oversized upload is refused", async () => {
     uploadBytes(ref(alice(), `users/${ALICE}/wardrobe/big.jpg`), huge, asPhoto)
   );
 });
+
+// ── Shared fit looks ────────────────────────────────────────────────────────
+//
+// The one path here whose contents are meant to reach strangers, and it reaches
+// them through the tokenised download URL held in the Firestore document rather
+// than through these rules. So the rules stay owner-only: the URL is a
+// capability the wearer hands out by publishing, and path access is not.
+
+test("only the wearer can write their own fit look", async () => {
+  const p = `fit_looks/${ALICE}/l1.jpg`;
+  await assertSucceeds(uploadBytes(ref(alice(), p), jpeg(), asPhoto));
+  await assertFails(uploadBytes(ref(bob(), p), jpeg(), asPhoto));
+});
+
+test("another signed-in user cannot reach the photo by path", async () => {
+  const p = `fit_looks/${ALICE}/l1.jpg`;
+  await seed(p);
+  await assertFails(getBytes(ref(bob(), p)));
+  await assertFails(getBytes(ref(stranger(), p)));
+});
+
+test("nobody else can delete the wearer's photo", async () => {
+  const p = `fit_looks/${ALICE}/l1.jpg`;
+  await seed(p);
+  await assertFails(deleteObject(ref(bob(), p)));
+  // The wearer must be able to, or a look can never really be taken down.
+  await assertSucceeds(deleteObject(ref(alice(), p)));
+});
+
+test("a fit look is size capped like every other upload", async () => {
+  const huge = new Uint8Array(16 * 1024 * 1024);
+  await assertFails(uploadBytes(ref(alice(), `fit_looks/${ALICE}/big.jpg`), huge, asPhoto));
+});
+
+test("a look cannot be posted outside the wearer's own folder", async () => {
+  await assertFails(uploadBytes(ref(alice(), `fit_looks/${BOB}/l1.jpg`), jpeg(), asPhoto));
+});

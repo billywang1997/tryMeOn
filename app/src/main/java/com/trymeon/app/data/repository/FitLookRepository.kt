@@ -78,11 +78,25 @@ class FitLookRepository {
         ref.id
     }
 
+    /**
+     * Takes a look down: the photograph first, then the record of it.
+     *
+     * The order is the point. A Firebase download URL keeps working for as long
+     * as the object exists — having no document pointing at it makes it
+     * unlisted, not unreachable, and anyone who ever saw the link keeps it. So
+     * a failure to remove the image has to fail the whole operation, or someone
+     * is told their photograph is gone while it is still being served.
+     *
+     * If the document then fails to go, the look shows as a broken card until
+     * the next attempt. That is the better of the two failures by a distance.
+     */
     suspend fun delete(look: FitLook): Result<Unit> = runCatching {
         val store = db ?: error("No cloud")
+        if (!look.imageUrl.startsWith("http") || look.imageUrl.contains("firebasestorage")) {
+            val bucket = storage ?: error("Cannot reach the photo to remove it")
+            bucket.reference.child("fit_looks/${look.uid}/${look.id}.jpg").delete().await()
+        }
         store.collection(COL).document(look.id).delete().await()
-        // Best effort: a stale image with no document pointing at it is unreachable anyway.
-        runCatching { storage?.reference?.child("fit_looks/${look.uid}/${look.id}.jpg")?.delete()?.await() }
         Unit
     }
 }

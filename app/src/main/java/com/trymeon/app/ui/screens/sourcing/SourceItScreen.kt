@@ -131,9 +131,16 @@ fun SourceItScreen(
         }
     }
 
-    fun run(text: String = query) {
+    /**
+     * @param fromPhoto the phrase a photo was read as, or blank for a typed
+     *   search. Owned by the search rather than kept beside it: left as its own
+     *   state, the caption stayed above the results of the next, unrelated
+     *   query the user typed.
+     */
+    fun run(text: String = query, fromPhoto: String = "") {
         if (text.isBlank() || loading) return
         query = text
+        readAs = fromPhoto
         keyboard?.hide()
         scope.launch {
             loading = true; error = ""; result = null; expandedId = null; benchmark = null
@@ -160,9 +167,7 @@ fun SourceItScreen(
                 error = "Could not tell what that is — try a clearer photo, or describe it"
                 return@launch
             }
-            readAs = seen.query
-            query = seen.query
-            run(seen.query)
+            run(seen.query, fromPhoto = seen.query)
         }
     }
 
@@ -796,11 +801,13 @@ private fun LocalComparison(item: SourcedItem, benchmark: MarketBenchmark?) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        // The card's primary claim, set in the display face like the price it
+        // is arguing against. It read as a caption while the price beside it
+        // read as a headline.
         Text(
             "$saving%",
-            style = MaterialTheme.typography.titleMedium,
-            color = Sage,
-            fontWeight = FontWeight.SemiBold
+            style = MaterialTheme.typography.headlineSmall,
+            color = Sage
         )
         Column {
             Text(

@@ -160,7 +160,6 @@ fun AppNavigation(
                     profileRepository = profileRepository,
                     wishlistRepository = wishlistRepository,
                     marketRepository = marketRepository,
-                    onNavigateToCost      = { navController.navigate("cost") },
                     onNavigateToAudit     = { navController.navigate("audit") },
                     onNavigateToWishlist  = { navController.navigate("wishlist") },
                     onNavigateToStreak    = { navController.navigate("streak") }
@@ -268,7 +267,7 @@ fun AppNavigation(
             }
 
             // Feature routes
-            composable("calendar") {
+            composable(FeatureRoutes.CALENDAR) {
                 if (logRepository != null) {
                     CalendarScreen(
                         logRepository      = logRepository,
@@ -277,12 +276,12 @@ fun AppNavigation(
                     )
                 }
             }
-            composable("cost") {
+            composable(FeatureRoutes.COST) {
                 val items by wardrobeRepository.getAllClothing().collectAsState(emptyList<ClothingItem>())
                 val logs by (logRepository?.getLogs() ?: kotlinx.coroutines.flow.flowOf(emptyList<OutfitLog>())).collectAsState(emptyList())
                 CostScreen(userItems = items, logs = logs, onBack = { navController.popBackStack() })
             }
-            composable("emergency") {
+            composable(FeatureRoutes.EMERGENCY) {
                 EmergencyScreen(
                     wardrobeRepository = wardrobeRepository,
                     claudeApiService   = claudeApiService,
@@ -290,7 +289,7 @@ fun AppNavigation(
                     onBack             = { navController.popBackStack() }
                 )
             }
-            composable("rating") {
+            composable(FeatureRoutes.RATING) {
                 RatingScreen(
                     claudeApiService   = claudeApiService,
                     profileRepository  = profileRepository,
@@ -298,7 +297,7 @@ fun AppNavigation(
                     onBack             = { navController.popBackStack() }
                 )
             }
-            composable("audit") {
+            composable(FeatureRoutes.AUDIT) {
                 val auditContext = LocalContext.current
                 com.trymeon.app.ui.screens.audit.ClosetAuditScreen(
                     wardrobeRepository = wardrobeRepository,
@@ -313,7 +312,7 @@ fun AppNavigation(
                     onBack             = { navController.popBackStack() }
                 )
             }
-            composable("wishlist") {
+            composable(FeatureRoutes.WISHLIST) {
                 if (wishlistRepository != null) {
                     val wishlistContext = LocalContext.current
                     com.trymeon.app.ui.screens.wishlist.WishlistScreen(
@@ -325,7 +324,7 @@ fun AppNavigation(
                     )
                 }
             }
-            composable("streak") {
+            composable(FeatureRoutes.STREAK) {
                 if (logRepository != null) {
                     com.trymeon.app.ui.screens.streak.StreakScreen(
                         wardrobeRepository = wardrobeRepository,

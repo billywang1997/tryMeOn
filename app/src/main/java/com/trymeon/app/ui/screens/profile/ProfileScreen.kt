@@ -20,7 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material3.*
@@ -41,6 +41,8 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.trymeon.app.AppSettings
+import com.trymeon.app.BuildConfig
+import com.trymeon.app.ui.navigation.FeatureRoutes
 import com.trymeon.app.data.BasicWardrobeProvider
 import com.trymeon.app.data.auth.FirebaseAuthRepository
 import com.trymeon.app.data.remote.FirestoreRepository
@@ -211,13 +213,13 @@ fun ProfileScreen(
         Spacer(Modifier.height(20.dp))
         ProfileSection("More") {
             Column {
-                FeatureRow("Closet audit", "What your wardrobe is missing, and why", "audit", onOpenFeature)
-                FeatureRow("Wishlist", "Saved items, watched for price drops", "wishlist", onOpenFeature)
-                FeatureRow("Streaks", "How long you have gone without repeating", "streak", onOpenFeature)
-                FeatureRow("Cost per wear", "What each piece has actually cost you", "cost", onOpenFeature)
-                FeatureRow("Outfit calendar", "What you wore, day by day", "calendar", onOpenFeature)
-                FeatureRow("Emergency outfit", "One good answer, fast", "emergency", onOpenFeature)
-                FeatureRow("Rate my outfit", "Scored on colour and occasion", "rating", onOpenFeature)
+                FeatureRow("Closet audit", "What your wardrobe is missing, and why", FeatureRoutes.AUDIT, onOpenFeature)
+                FeatureRow("Wishlist", "Saved items, watched for price drops", FeatureRoutes.WISHLIST, onOpenFeature)
+                FeatureRow("Streaks", "How long you have gone without repeating", FeatureRoutes.STREAK, onOpenFeature)
+                FeatureRow("Cost per wear", "What each piece has actually cost you", FeatureRoutes.COST, onOpenFeature)
+                FeatureRow("Outfit calendar", "What you wore, day by day", FeatureRoutes.CALENDAR, onOpenFeature)
+                FeatureRow("Emergency outfit", "One good answer, fast", FeatureRoutes.EMERGENCY, onOpenFeature)
+                FeatureRow("Rate my outfit", "Scored on colour and occasion", FeatureRoutes.RATING, onOpenFeature)
             }
         }
 
@@ -364,7 +366,13 @@ fun ProfileScreen(
             Spacer(Modifier.height(20.dp))
         }
 
-        Column(modifier = Modifier.padding(horizontal = 20.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Developer controls, not a feature.
+        //
+        // The relay exists so that upstream keys live on a server and never in
+        // the app; asking a shopper to paste an OpenAI key both undoes that and
+        // makes no sense to them. Kept for debug builds, where they are how a
+        // developer points the app at their own account.
+        if (BuildConfig.DEBUG) Column(modifier = Modifier.padding(horizontal = 20.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(
                 onClick = { showApiKeyDialog = true },
                 modifier = Modifier.fillMaxWidth(),
@@ -397,7 +405,7 @@ fun ProfileScreen(
                 Icon(Icons.Default.Key, null, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    if (settings.rapidApiKey.isNotBlank()) "RapidAPI Key  ✓" else "Edit RapidAPI Key (ASOS / The Iconic)",
+                    if (settings.rapidApiKey.isNotBlank()) "RapidAPI Key  ✓" else "Edit RapidAPI Key",
                     style = MaterialTheme.typography.labelLarge
                 )
             }
@@ -831,7 +839,7 @@ fun RapidApiKeyDialog(current: String, onDismiss: () -> Unit, onConfirm: (String
         title = { Text("RAPIDAPI KEY", style = MaterialTheme.typography.titleMedium) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Used for ASOS and The Iconic product search.\nGet a free key at rapidapi.com → subscribe to the ASOS and The Iconic APIs.",
+                Text("Used for the Taobao product search fallback.\nGet a key at rapidapi.com → subscribe to taobao-datahub.",
                     style = MaterialTheme.typography.bodySmall, color = Ash)
                 OutlinedTextField(
                     value = key, onValueChange = { key = it },
@@ -1092,7 +1100,7 @@ private fun LookItemChip(item: ClothingItem, context: android.content.Context) {
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
                 border = androidx.compose.foundation.BorderStroke(0.5.dp, Color.White.copy(alpha = 0.4f))
             ) {
-                Icon(Icons.Default.OpenInNew, null, modifier = Modifier.size(11.dp))
+                Icon(Icons.AutoMirrored.Filled.OpenInNew, null, modifier = Modifier.size(11.dp))
                 Spacer(Modifier.width(3.dp))
                 Text("View", style = MaterialTheme.typography.labelSmall)
             }

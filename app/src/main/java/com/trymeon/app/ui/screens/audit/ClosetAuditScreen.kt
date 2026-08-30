@@ -13,7 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Share
@@ -202,7 +202,7 @@ fun ClosetAuditScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, null, tint = Ink)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Ink)
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text("AI CLOSET AUDIT", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Light, color = Ink)

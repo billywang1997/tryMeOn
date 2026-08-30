@@ -5,7 +5,6 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.trymeon.app.data.auth.FirebaseAuthRepository
-import com.trymeon.app.data.remote.FirebaseStorageRepository
 import com.trymeon.app.data.remote.FirestoreRepository
 import com.trymeon.app.data.repository.UserProfileRepository
 import com.trymeon.app.data.repository.WardrobeRepository
@@ -30,7 +29,6 @@ class ProfileViewModel(
     // saved looks, price expectation, style — is local and must still work.
     private val authRepository: FirebaseAuthRepository? = null,
     private val firestoreRepository: FirestoreRepository? = null,
-    private val storageRepository: FirebaseStorageRepository? = null
 ) : ViewModel() {
 
     private val _profile = MutableStateFlow(UserProfile())

@@ -55,12 +55,21 @@ object WeatherService {
         .callTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
         .build()
 
-    /** Detect the user's city from their IP address using ipinfo.io (no API key required). */
+    /**
+     * Detect the user's city from their IP address using ipinfo.io (no API key
+     * required).
+     *
+     * On a tighter budget than the forecast itself: this call only refines a
+     * city we already have a fallback for, and it runs before the forecast, so
+     * whatever it spends is added to how long the card spins.
+     */
     suspend fun detectCity(): String = withContext(Dispatchers.IO) {
         try {
-            val body = client.newCall(
-                Request.Builder().url("https://ipinfo.io/json").build()
-            ).execute().use { it.body?.string() } ?: return@withContext ""
+            val body = client.newBuilder()
+                .callTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+                .newCall(Request.Builder().url("https://ipinfo.io/json").build())
+                .execute().use { it.body?.string() } ?: return@withContext ""
             org.json.JSONObject(body).optString("city", "")
         } catch (e: Exception) { "" }
     }

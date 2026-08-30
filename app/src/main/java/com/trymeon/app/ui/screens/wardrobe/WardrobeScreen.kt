@@ -69,7 +69,6 @@ fun WardrobeScreen(
     ebayClientSecret: String = "",
     serpApiKey: String = "",
     ebayAffiliateCampaignId: String = "",
-    onNavigateToCost: () -> Unit = {},
     onNavigateToAudit: () -> Unit = {},
     onNavigateToWishlist: () -> Unit = {},
     onNavigateToStreak: () -> Unit = {}

@@ -8,6 +8,12 @@ package com.trymeon.app.domain.model
  * Shown only to people of a similar build, because "how does it look on
  * someone 30cm taller" answers nothing. Shared explicitly, one look at a time —
  * a body and its numbers are the wearer's to publish, never the app's.
+ *
+ * It carries the three numbers the share sheet shows the wearer before they
+ * agree — gender, height, weight — and no others. It once also carried bust,
+ * waist and hips, which the sheet did not mention, the matcher did not use and
+ * no screen displayed: measurements published to every signed-in reader for
+ * nothing. A field here is a field the world can read.
  */
 data class FitLook(
     val id: String = "",
@@ -15,10 +21,6 @@ data class FitLook(
     val gender: String = "",
     val heightCm: Int = 0,
     val weightKg: Int = 0,
-    /** Optional; zero when the wearer did not fill them in. */
-    val bust: Int = 0,
-    val waist: Int = 0,
-    val hips: Int = 0,
     /** Public download URL of the render or photo. */
     val imageUrl: String = "",
     /** What was worn, as the wearer saw it named: "black oversized crew tee". */

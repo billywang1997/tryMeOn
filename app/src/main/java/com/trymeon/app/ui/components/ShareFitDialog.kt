@@ -171,8 +171,11 @@ fun ShareFitDialog(
                             val look = FitLook(
                                 uid = uid,
                                 gender = p.gender,
+                                // Exactly what the "Shown with" line above says,
+                                // and nothing else. Bust, waist and hips used to
+                                // travel with it — never displayed, never used to
+                                // match, and readable by every signed-in user.
                                 heightCm = p.height, weightKg = p.weight,
-                                bust = p.bust, waist = p.waist, hips = p.hips,
                                 garment = garment.trim(),
                                 category = category.name,
                                 sizeWorn = size.trim(),

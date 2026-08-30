@@ -8,6 +8,11 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.PhotoCamera
+import com.trymeon.app.data.remote.GarmentSighting
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -89,7 +94,12 @@ fun SourceItScreen(
     /** Null hides the try-on handoff; sourcing still works on its own. */
     onTryOn: (() -> Unit)? = null,
     /** Null when shown as a bottom-nav tab, which has nowhere to go back to. */
-    onBack: (() -> Unit)? = null
+    onBack: (() -> Unit)? = null,
+    /**
+     * Turns a photo into a search phrase. Null hides the camera entirely —
+     * offering it without a way to read the photo would be a dead button.
+     */
+    identifyPhoto: (suspend (android.net.Uri) -> GarmentSighting?)? = null
 ) {
     var query by remember { mutableStateOf(initialQuery) }
     var result by remember { mutableStateOf<SourcingResult?>(null) }
@@ -100,6 +110,10 @@ fun SourceItScreen(
     var cardPercent by remember { mutableStateOf(SourcingDefaults.DEFAULT_CARD_SETTLEMENT_PERCENT) }
     var gaps by remember { mutableStateOf<List<ClosetGap>>(emptyList()) }
     var benchmark by remember { mutableStateOf<MarketBenchmark?>(null) }
+    var reading by remember { mutableStateOf(false) }
+    // What the photo was read as, kept so the card can say what it searched for
+    // rather than leaving the user to guess why these results appeared.
+    var readAs by remember { mutableStateOf("") }
 
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
@@ -133,6 +147,25 @@ fun SourceItScreen(
         }
     }
 
+    val photoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        val read = identifyPhoto ?: return@rememberLauncherForActivityResult
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            reading = true; error = ""; readAs = ""
+            val seen = read(uri)
+            reading = false
+            if (seen == null) {
+                error = "Could not tell what that is — try a clearer photo, or describe it"
+                return@launch
+            }
+            readAs = seen.query
+            query = seen.query
+            run(seen.query)
+        }
+    }
+
     LaunchedEffect(initialQuery) { if (initialQuery.isNotBlank()) run(initialQuery) }
 
     Column(
@@ -156,7 +189,10 @@ fun SourceItScreen(
                     value = query,
                     onValue = { query = it },
                     onSearch = { run() },
-                    enabled = !loading
+                    enabled = !loading && !reading,
+                    onPhoto = identifyPhoto?.let { { photoPicker.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    ) } }
                 )
             }
 
@@ -164,7 +200,21 @@ fun SourceItScreen(
                 item { Intro(gaps = gaps, onPick = { run(it) }) }
             }
 
+            if (reading) item { LoadingRow("Reading the photo…") }
             if (loading) item { LoadingRow() }
+
+            // Saying what the photo was read as: these results follow from that
+            // reading, and without it a wrong answer looks like a bad search.
+            if (readAs.isNotEmpty() && !reading) {
+                item {
+                    Text(
+                        "From your photo: $readAs",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Ash,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                }
+            }
 
             if (error.isNotEmpty()) item { ErrorNote(error) }
 
@@ -229,15 +279,35 @@ private fun Header(onBack: (() -> Unit)?) {
 }
 
 @Composable
-private fun SearchField(value: String, onValue: (String) -> Unit, onSearch: () -> Unit, enabled: Boolean) {
+private fun SearchField(
+    value: String,
+    onValue: (String) -> Unit,
+    onSearch: () -> Unit,
+    enabled: Boolean,
+    onPhoto: (() -> Unit)? = null
+) {
     OutlinedTextField(
         value = value,
         onValueChange = onValue,
         enabled = enabled,
-        placeholder = { Text("Describe it in English", color = Ash) },
+        placeholder = { Text("Describe it, or use a photo", color = Ash) },
         trailingIcon = {
-            IconButton(onClick = onSearch, enabled = enabled && value.isNotBlank()) {
-                Icon(Icons.Default.Search, contentDescription = "Search", tint = if (value.isBlank()) Mist else Ink)
+            Row {
+                // A photo is a faster way to say "this kind of thing" than
+                // finding the words for it, and it goes down exactly the same
+                // path afterwards.
+                if (onPhoto != null) {
+                    IconButton(onClick = onPhoto, enabled = enabled) {
+                        Icon(
+                            Icons.Default.PhotoCamera,
+                            contentDescription = "Find similar from a photo",
+                            tint = if (enabled) Ink else Mist
+                        )
+                    }
+                }
+                IconButton(onClick = onSearch, enabled = enabled && value.isNotBlank()) {
+                    Icon(Icons.Default.Search, contentDescription = "Search", tint = if (value.isBlank()) Mist else Ink)
+                }
             }
         },
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -310,7 +380,7 @@ private fun Suggestion(title: String, caption: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun LoadingRow() {
+private fun LoadingRow(text: String = "Searching…") {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 28.dp),
         horizontalArrangement = Arrangement.Center,
@@ -318,7 +388,7 @@ private fun LoadingRow() {
     ) {
         CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 1.5.dp, color = Ink)
         Spacer(Modifier.width(12.dp))
-        Text("Translating, then pricing…", style = MaterialTheme.typography.bodySmall, color = Ash)
+        Text(text, style = MaterialTheme.typography.bodySmall, color = Ash)
     }
 }
 

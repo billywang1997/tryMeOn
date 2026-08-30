@@ -31,7 +31,10 @@ class BenchmarkDiagnosticTest {
 
         val queries = listOf(
             "black chunky sneakers", "grey straight jeans", "cropped linen blazer",
-            "men's black leather sneakers", "women's black bucket hat"
+            "men's black leather sneakers", "women's black bucket hat",
+            // The photo lookup says "sweater"; Australian retail says "jumper".
+            "navy ribbed turtleneck sweater", "navy ribbed turtleneck jumper",
+            "grey wool sweater", "grey wool jumper"
         )
         for (q in queries) {
             val results = serp.search(serpKey, q, limit = 20).getOrNull().orEmpty()

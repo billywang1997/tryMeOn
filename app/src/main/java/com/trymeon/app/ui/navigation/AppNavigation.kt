@@ -226,6 +226,11 @@ fun AppNavigation(
                 val sourceWardrobe by wardrobeRepository.getAllClothing().collectAsState(emptyList())
                 com.trymeon.app.ui.screens.sourcing.SourceItScreen(
                     repository = sourcingRepository,
+                    // Only offered when there is a key to read the photo with;
+                    // a camera button that cannot answer is worse than none.
+                    identifyPhoto = if (apiKey.isBlank()) null else { uri ->
+                        com.trymeon.app.util.PhotoQuery.read(sourceContext, uri, claudeApiService, apiKey)
+                    },
                     closetGaps = remember(apiKey) {
                         com.trymeon.app.data.sourcing.ClosetGapService(
                             claudeApiService, apiKey,

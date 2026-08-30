@@ -91,7 +91,7 @@ class AuMarketPrices(
 
     private fun matches(head: String, modifiers: List<String>, title: Set<String>): Boolean {
         val stems = title.map(::stem).toSet()
-        if (stem(head) !in stems) return false
+        if (namesFor(head).none { it in stems }) return false
         if (modifiers.isEmpty()) return true
         val hit = modifiers.count { stem(it) in stems }
         return hit * 2 >= modifiers.size
@@ -102,6 +102,36 @@ class AuMarketPrices(
      * "Sneakers" and nothing here needs to be cleverer than that.
      */
     private fun stem(word: String) = if (word.length > 3 && word.endsWith("s")) word.dropLast(1) else word
+
+    /**
+     * What Australian shops call the same garment.
+     *
+     * Measured, not guessed: on the same twenty results, "grey wool sweater"
+     * kept two listings and found no benchmark while "grey wool jumper" kept
+     * ten and priced it at A$105. The photo lookup and the stylist both write
+     * American English, and the shops here do not.
+     */
+    private val ALSO_CALLED = listOf(
+        setOf("sweater", "jumper", "pullover", "knit"),
+        setOf("sneaker", "trainer", "runner"),
+        setOf("pant", "trouser"),
+        setOf("sweatpant", "trackpant", "jogger"),
+        setOf("vest", "singlet"),
+        setOf("purse", "handbag"),
+        setOf("beanie", "bobblehat"),
+        setOf("raincoat", "rainjacket"),
+        setOf("swimsuit", "swimmer", "bather", "togs"),
+        setOf("underwear", "undies"),
+        setOf("sandal", "thong"),
+        setOf("jumper dress", "pinafore")
+    )
+
+    /** The head noun and anything a local shop would call it instead. */
+    private fun namesFor(head: String): Set<String> {
+        val stemmed = stem(head)
+        return ALSO_CALLED.firstOrNull { stemmed in it }?.map(::stem)?.toSet()
+            ?: setOf(stemmed)
+    }
 
     private fun parsePrice(raw: String): Double? =
         Regex("""\d[\d,]*(\.\d+)?""").find(raw)?.value?.replace(",", "")?.toDoubleOrNull()

@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
+import com.trymeon.app.domain.model.ClothingCategory
 import com.trymeon.app.domain.model.ClothingItem
 import com.trymeon.app.domain.model.OutfitScene
 import com.trymeon.app.domain.model.UserProfile
@@ -257,6 +258,33 @@ Suggestion: (one sentence)
             else -> com.trymeon.app.domain.model.ClothingCategory.INNER
         }
     }
+
+    /**
+     * What a photographed garment is, in words a shop search can use.
+     *
+     * Deliberately a description and not an identification: without an index of
+     * product images there is no way to find *this* jacket, only jackets like
+     * it, and the wording it produces is what the rest of the app then honestly
+     * compares against. Colour, material and cut are what carry a search;
+     * brands and logos are left out because they narrow it to nothing.
+     */
+    suspend fun describeGarment(apiKey: String, imageBase64: String): GarmentSighting? =
+        withContext(Dispatchers.IO) {
+            val contents = listOf(
+                OpenAiContent("text", DESCRIBE_GARMENT_PROMPT),
+                OpenAiContent("image_url", imageUrl = ImageUrl("data:image/jpeg;base64,$imageBase64", "low"))
+            )
+            val request = OpenAiRequest(
+                messages = listOf(OpenAiMessage("user", contents)), maxTokens = 60
+            )
+            val raw = try {
+                api.chat("Bearer $apiKey", request).choices.firstOrNull()?.message?.content.orEmpty()
+            } catch (e: Exception) {
+                Log.w("Describe", "photo lookup failed: ${e.message}")
+                ""
+            }
+            GarmentSighting.parse(raw)
+        }
 
     suspend fun inferGenderFromWardrobe(apiKey: String, clothes: List<ClothingItem>): String = withContext(Dispatchers.IO) {
         if (clothes.isEmpty()) return@withContext ""
@@ -1126,3 +1154,52 @@ Provide exactly 6 BUY suggestions. Each should be high-impact for this specific 
         return Bitmap.createScaledBitmap(bitmap, (width * ratio).toInt(), (height * ratio).toInt(), true)
     }
 }
+
+/** A garment recognised in a photo, as something to search for. */
+data class GarmentSighting(
+    /** A short shopping phrase, e.g. "black chunky leather sneakers". */
+    val query: String,
+    val category: ClothingCategory
+) {
+    companion object {
+        /**
+         * Reads `SEEN:<category>|<description>`.
+         *
+         * The same pipe shape the rest of the app uses, and read with the same
+         * tolerance: the model drops the prefix often enough that insisting on
+         * it would throw away a usable answer.
+         */
+        fun parse(raw: String): GarmentSighting? {
+            val line = raw.lineSequence()
+                .map { it.trim() }
+                .firstOrNull { it.contains("|") } ?: return null
+            val body = line.substringAfter("SEEN:", line).trim()
+            val parts = body.split("|").map { it.trim() }
+            if (parts.size < 2) return null
+            val description = parts[1].ifBlank { return null }
+            return GarmentSighting(description, categoryOf(parts[0]))
+        }
+
+        private fun categoryOf(name: String): ClothingCategory {
+            val n = name.lowercase()
+            return when {
+                n.contains("outer") || n.contains("jacket") || n.contains("coat") -> ClothingCategory.OUTERWEAR
+                n.contains("bottom") || n.contains("pant") || n.contains("trouser") ||
+                    n.contains("jean") || n.contains("skirt") || n.contains("short") -> ClothingCategory.PANTS
+                n.contains("dress") || n.contains("jumpsuit") -> ClothingCategory.DRESS
+                n.contains("shoe") || n.contains("sneaker") || n.contains("boot") -> ClothingCategory.SHOES
+                n.contains("bag") || n.contains("purse") -> ClothingCategory.BAG
+                n.contains("accessor") || n.contains("hat") || n.contains("scarf") -> ClothingCategory.ACCESSORY
+                else -> ClothingCategory.INNER
+            }
+        }
+    }
+}
+
+private const val DESCRIBE_GARMENT_PROMPT =
+    "Describe the main garment in this photo as a shopping search phrase.\n" +
+        "Reply with exactly one line: SEEN:<category>|<description>\n" +
+        "<category> is one of: Top, Outerwear, Bottoms, Dress, Shoes, Bag, Accessory.\n" +
+        "<description> is three to six words covering colour, material and cut — " +
+        "for example \"black chunky leather sneakers\" or \"beige oversized wool coat\".\n" +
+        "Do not name a brand, and do not guess one from a logo."

@@ -114,4 +114,29 @@ class AuMarketPricesTest {
         // Nothing to boast about when the import is not actually cheaper.
         assertNull(b.savingPercentAgainst(200.0))
     }
+
+    @Test
+    fun `an australian shop calling it a jumper still counts`() {
+        // Real measurement: on the same twenty results, "grey wool sweater"
+        // kept two listings and produced no benchmark, while "grey wool jumper"
+        // kept ten. The photo lookup writes American English; the shops here
+        // do not, and the shopper pays for the mismatch in a missing comparison.
+        val results = listOf(
+            listing("Uniqlo Merino Wool Jumper Grey", "79.90", "AUD"),
+            listing("Country Road Wool Knit Jumper", "149.00", "AUD"),
+            listing("Sportscraft Grey Wool Pullover", "179.00", "AUD"),
+            listing("Jac + Jack Wool Jumper Charcoal", "220.00", "AUD")
+        )
+        val kept = prices.comparablePrices(results, "grey wool sweater")
+        assertEquals("the local word for it was thrown away", 4, kept.size)
+        assertNotNull(MarketBenchmark.from(kept))
+    }
+
+    @Test
+    fun `a synonym does not open the filter to anything`() {
+        // The head noun is still required to be one of a known set; a jumper is
+        // not a pair of jeans however the shop words it.
+        val results = listOf(listing("Levi's 501 Straight Jeans Blue", "129.00", "AUD"))
+        assertEquals(emptyList<Double>(), prices.comparablePrices(results, "grey wool sweater"))
+    }
 }

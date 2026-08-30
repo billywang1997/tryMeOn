@@ -231,11 +231,43 @@ class ReplicateApiService {
         }
     }
 
-    private fun inferCategory(desc: String): String {
+    /**
+     * Which half of the body a garment belongs on.
+     *
+     * The try-on service takes exactly three values, so footwear and bags have
+     * no home of their own and go to the nearer half. Getting this wrong is not
+     * subtle — the render puts a pair of trousers on the model's torso.
+     *
+     * Matched on whole words. Substring matching is what made "short sleeve
+     * top" read as shorts, and it is why a description is checked against a
+     * vocabulary rather than a handful of `contains` calls. The vocabulary
+     * itself was short of "trousers", which is the word the stylist actually
+     * uses, so every pair it recommended was rendered as a top.
+     */
+    internal fun inferCategory(desc: String): String {
         val d = desc.lowercase()
+        val words = Regex("[a-z]+").findAll(d).map { it.value }.toSet()
+
+        // "dress shirt" is a shirt and "dress shoes" are shoes; only the word
+        // order says so, which is beyond a word set, so they are named.
+        if ("dress shirt" in d || "dress top" in d) return "tops"
+
+        fun any(vararg v: String) = v.any { it in words }
+
         return when {
-            d.contains("bottom") || d.contains("pants") || d.contains("skirt") || d.contains("jeans") || d.contains("shorts") -> "bottoms"
-            d.contains("one-piece") || d.contains("dress") || d.contains("jumpsuit") || d.contains("romper") -> "one-pieces"
+            any("bottom", "bottoms", "pants", "pant", "trouser", "trousers",
+                // Plural only: "short" is half of "short sleeve", and a cargo
+                // jacket is a jacket — the trouser senses carry their own noun.
+                "jean", "jeans", "denim", "shorts", "skirt", "skirts",
+                "chino", "chinos", "legging", "leggings", "jogger", "joggers",
+                "slack", "slacks", "culotte", "culottes", "capri", "capris",
+                // No category of their own; the lower body is the closer guess.
+                "shoe", "shoes", "sneaker", "sneakers", "boot", "boots",
+                "loafer", "loafers", "trainer", "trainers", "heel", "heels",
+                "sandal", "sandals", "footwear") -> "bottoms"
+            any("piece", "dress", "dresses", "jumpsuit", "jumpsuits",
+                "romper", "rompers", "overall", "overalls", "gown", "gowns",
+                "set", "sets") -> "one-pieces"
             else -> "tops"
         }
     }

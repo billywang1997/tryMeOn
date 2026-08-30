@@ -7,7 +7,22 @@ enum class ClothingCategory(val label: String) {
     DRESS("Dress"),
     SHOES("Shoes"),
     ACCESSORY("Accessory"),
-    BAG("Bag")
+    BAG("Bag");
+
+    /**
+     * Which half of the body the try-on service should dress.
+     *
+     * It takes exactly three values, so shoes, bags and accessories have no
+     * home of their own and go to the nearer half. Knowing the slot beats
+     * guessing from a product title, which is what happens when nothing is
+     * passed.
+     */
+    val fashnCategory: String
+        get() = when (this) {
+            PANTS, SHOES -> "bottoms"
+            DRESS -> "one-pieces"
+            INNER, OUTERWEAR, ACCESSORY, BAG -> "tops"
+        }
 }
 
 enum class Mood(val emoji: String, val label: String) {

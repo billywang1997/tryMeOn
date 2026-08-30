@@ -1,5 +1,7 @@
 package com.trymeon.app.ui.screens.tryon
 
+import com.trymeon.app.domain.model.ClothingCategory
+
 /**
  * Reads the stylist's plan.
  *
@@ -19,27 +21,32 @@ package com.trymeon.app.ui.screens.tryon
 internal object TryOnPlanParser {
 
     /**
-     * What the try-on service should treat the garment as.
+     * The wardrobe slot each name the model uses corresponds to.
      *
-     * Its vocabulary is exactly three values — tops, bottoms, one-pieces — so
-     * shoes and accessories have no home of their own and are placed on the
-     * half of the body they belong to. Every value here must be one the
-     * service accepts; anything else is rejected at the render.
+     * Resolved to a try-on category through [ClothingCategory.fashnCategory],
+     * so the plan and the render answer this question the same way — they used
+     * to hold separate tables, and only one of them was ever read.
      */
-    private val FASHN = mapOf(
-        "top" to "tops", "tops" to "tops", "shirt" to "tops", "tee" to "tops",
-        "jacket" to "tops", "outerwear" to "tops", "inner" to "tops",
-        "bottoms" to "bottoms", "bottom" to "bottoms", "pants" to "bottoms",
-        "trousers" to "bottoms", "jeans" to "bottoms", "skirt" to "bottoms",
-        "set" to "one-pieces", "dress" to "one-pieces", "jumpsuit" to "one-pieces",
-        "outfit" to "one-pieces",
-        "shoes" to "bottoms", "footwear" to "bottoms", "sneakers" to "bottoms",
-        "bag" to "tops", "accessory" to "tops", "accessories" to "tops",
-        "hat" to "tops", "jewellery" to "tops", "jewelry" to "tops"
+    private val SLOTS = mapOf(
+        "top" to ClothingCategory.INNER, "tops" to ClothingCategory.INNER,
+        "shirt" to ClothingCategory.INNER, "tee" to ClothingCategory.INNER,
+        "inner" to ClothingCategory.INNER,
+        "jacket" to ClothingCategory.OUTERWEAR, "outerwear" to ClothingCategory.OUTERWEAR,
+        "bottoms" to ClothingCategory.PANTS, "bottom" to ClothingCategory.PANTS,
+        "pants" to ClothingCategory.PANTS, "trousers" to ClothingCategory.PANTS,
+        "jeans" to ClothingCategory.PANTS, "skirt" to ClothingCategory.PANTS,
+        "set" to ClothingCategory.DRESS, "dress" to ClothingCategory.DRESS,
+        "jumpsuit" to ClothingCategory.DRESS, "outfit" to ClothingCategory.DRESS,
+        "shoes" to ClothingCategory.SHOES, "footwear" to ClothingCategory.SHOES,
+        "sneakers" to ClothingCategory.SHOES,
+        "bag" to ClothingCategory.BAG,
+        "accessory" to ClothingCategory.ACCESSORY, "accessories" to ClothingCategory.ACCESSORY,
+        "hat" to ClothingCategory.ACCESSORY, "jewellery" to ClothingCategory.ACCESSORY,
+        "jewelry" to ClothingCategory.ACCESSORY
     )
 
     /** Category names the model uses as a line prefix when it drops "CAT:". */
-    private val PREFIXES = FASHN.keys + setOf("one-piece", "one-pieces")
+    private val PREFIXES = SLOTS.keys + setOf("one-piece", "one-pieces")
 
     fun parse(text: String, ensureGender: (String) -> String): List<EbayTryOnCategory> =
         text.lines().mapNotNull { raw ->
@@ -57,7 +64,7 @@ internal object TryOnPlanParser {
             EbayTryOnCategory(
                 name = category,
                 reason = fields[1].trim(),
-                fashnCategory = FASHN[category.lowercase()] ?: "tops",
+                fashnCategory = (SLOTS[category.lowercase()] ?: ClothingCategory.INNER).fashnCategory,
                 searchQuery = ensureGender(fields[2].trim()),
                 // The plan already wrote this, so the strip does not pay for a
                 // second round trip to translate what the model just said.

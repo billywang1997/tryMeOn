@@ -55,6 +55,14 @@ data class EssentialsCategoryState(
 )
 
 // Unified cross-tab selection entry — one per garment slot (category)
+/** A garment ready to render: where its image is, what it is, and where it goes. */
+data class Garment(
+    val path: String,
+    val label: String,
+    /** Null falls back to reading the label, which is a guess. */
+    val fashnCategory: String?
+)
+
 data class SelectedGarment(
     val slotKey: String,         // ClothingCategory.name
     val source: GarmentTab,
@@ -62,6 +70,10 @@ data class SelectedGarment(
     val ebayItem: EbayItem? = null,
     val ebayCategory: String = ""
 ) {
+    /** The slot this fills, when it names a real category. */
+    val slotCategory: ClothingCategory?
+        get() = ClothingCategory.entries.firstOrNull { it.name == slotKey }
+
     val displayLabel: String get() = when {
         clothingItem != null -> clothingItem.name.ifEmpty { clothingItem.category.label }
         ebayItem != null -> ebayItem.title.take(24)
@@ -588,12 +600,12 @@ class TryOnViewModel(
                         else {
                             val label = listOf(garment.clothingItem.color, garment.clothingItem.category.label, garment.clothingItem.name)
                                 .filter { it.isNotBlank() }.joinToString(" ")
-                            Pair(path, label)
+                            Garment(path, label, garment.slotCategory?.fashnCategory)
                         }
                     }
                     garment.ebayItem != null -> {
                         val url = garment.ebayItem.imageUrl.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-                        Pair(url, garment.ebayItem.title.take(40))
+                        Garment(url, garment.ebayItem.title.take(40), garment.slotCategory?.fashnCategory)
                     }
                     else -> null
                 }
@@ -629,7 +641,7 @@ class TryOnViewModel(
             val base = portrait?.imagePath ?: userImagePath
             val front = dressWithFashn(base, garments)
                 ?: claudeService.generateTryOnImage(
-                    openAiKey, userImagePath, garments, state.profile, "front", bodyRef,
+                    openAiKey, userImagePath, garments.map { it.path to it.label }, state.profile, "front", bodyRef,
                     modelPortraitPath = portrait?.imagePath
                 )
             if (front.isFailure) {
@@ -647,7 +659,7 @@ class TryOnViewModel(
             if (!usedFashn) {
                 val views = _uiState.value.resultViews.toMutableList()
                 val side = claudeService.generateTryOnImage(
-                    openAiKey, userImagePath, garments, state.profile, "side", bodyRef,
+                    openAiKey, userImagePath, garments.map { it.path to it.label }, state.profile, "side", bodyRef,
                     modelPortraitPath = portrait?.imagePath
                 )
                 if (side.isSuccess) {
@@ -668,18 +680,18 @@ class TryOnViewModel(
      */
     private suspend fun dressWithFashn(
         personPath: String,
-        garments: List<Pair<String, String>>
+        garments: List<Garment>
     ): Result<String>? {
         usedFashn = false
         if (replicateKey.isBlank() || garments.isEmpty()) return null
 
         var current = personPath
         for ((index, garment) in garments.withIndex()) {
-            val (path, label) = garment
+            val (path, label, category) = garment
             _uiState.value = _uiState.value.copy(
                 loadingStep = "Dressing your model… ${index + 1}/${garments.size}"
             )
-            val step = replicateService.tryOn(replicateKey, current, path, label)
+            val step = replicateService.tryOn(replicateKey, current, path, label, category)
             if (step.isFailure) {
                 Log.w("TryOnVM", "FASHN step ${index + 1} failed: ${step.exceptionOrNull()?.message}")
                 return null
@@ -791,16 +803,6 @@ class TryOnViewModel(
 
     private fun parseEbayCategories(text: String): List<EbayTryOnCategory> =
         TryOnPlanParser.parse(text) { ensureGenderInQuery(it) }
-
-    fun inferEbayCategory(title: String): String {
-        val t = title.lowercase()
-        return when {
-            t.contains("pant") || t.contains("jean") || t.contains("trouser") ||
-            t.contains("short") || t.contains("skirt") -> "bottoms"
-            t.contains("dress") || t.contains("jumpsuit") || t.contains("overall") -> "one-pieces"
-            else -> "tops"
-        }
-    }
 
     private fun savePhoto(context: Context, uri: Uri): String? = try {
         val dir = File(context.cacheDir, "tryon").apply { mkdirs() }

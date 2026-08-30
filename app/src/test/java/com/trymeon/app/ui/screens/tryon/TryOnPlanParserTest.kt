@@ -1,5 +1,6 @@
 package com.trymeon.app.ui.screens.tryon
 
+import com.trymeon.app.domain.model.ClothingCategory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -92,5 +93,25 @@ class TryOnPlanParserTest {
     fun `a truncated line is dropped rather than half read`() {
         assertEquals(0, parse("CAT:shoes|only a reason").size)
         assertEquals(0, parse("SHOES:").size)
+    }
+
+    @Test
+    fun `the plan and the render agree on where a garment goes`() {
+        // These used to be two tables in two files, and only one of them was
+        // ever read: the render inferred from the product title instead, so a
+        // pair of trousers went on the torso while this table said bottoms.
+        mapOf(
+            "shoes" to ClothingCategory.SHOES,
+            "bottoms" to ClothingCategory.PANTS,
+            "jacket" to ClothingCategory.OUTERWEAR,
+            "dress" to ClothingCategory.DRESS,
+            "bag" to ClothingCategory.BAG
+        ).forEach { (name, slot) ->
+            val parsed = parse("CAT:$name|reason|query|中文").single()
+            assertEquals(
+                "the plan disagrees with the slot for $name",
+                slot.fashnCategory, parsed.fashnCategory
+            )
+        }
     }
 }

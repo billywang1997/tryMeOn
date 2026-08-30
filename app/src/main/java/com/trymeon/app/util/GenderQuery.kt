@@ -24,5 +24,7 @@ fun ensureGenderInQuery(query: String, gender: String?): String {
         .replace(Regex("\\bmale\\b", RegexOption.IGNORE_CASE), "")
         .trim()
         .replace(Regex("\\s{2,}"), " ")
-    return "$genderWord $cleaned"
+    // A query that was nothing but a gender word leaves `cleaned` empty, and
+    // "man " with a trailing space is what then goes to the search API.
+    return if (cleaned.isEmpty()) genderWord else "$genderWord $cleaned"
 }

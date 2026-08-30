@@ -8,11 +8,9 @@ import androidx.lifecycle.viewModelScope
 import com.trymeon.app.data.BasicWardrobeProvider
 import com.trymeon.app.data.remote.ScraperApiService
 import com.trymeon.app.data.remote.ClaudeApiService
-import com.trymeon.app.data.remote.EbayApiService
 import com.trymeon.app.data.remote.EbayItem
 import com.trymeon.app.data.remote.ReplicateApiService
 import com.trymeon.app.data.remote.SerpApiService
-import com.trymeon.app.data.remote.VintedApiService
 import com.trymeon.app.data.remote.UnsplashService
 import com.trymeon.app.data.repository.UserProfileRepository
 import com.trymeon.app.data.tryon.VirtualModelStore
@@ -139,18 +137,9 @@ class TryOnViewModel(
     private val replicateService: ReplicateApiService,
     private val openAiKey: String,
     private val replicateKey: String,
-    private val ebayService: EbayApiService? = null,
-    private val ebayClientId: String = "",
-    private val ebayClientSecret: String = "",
-    private val amazonService: ScraperApiService? = null,
-    private val rapidApiKey: String = "",
-    private val vintedService: VintedApiService? = null,
     private val ebayAffiliateCampaignId: String = "",
     private val amazonAssociateTag: String = "",
     private val styleKeywords: Set<String> = emptySet(),
-    private val scraperApiKey: String = "",
-    private val serpService: SerpApiService? = null,
-    private val serpApiKey: String = "",
     /** Null falls back to generating the person alongside the clothes each time. */
     private val virtualModels: VirtualModelStore? = null,
     /** Required: a missing catalog is an empty shop tab with no other symptom. */
@@ -820,16 +809,3 @@ class TryOnViewModel(
         file.absolutePath
     } catch (e: Exception) { null }
 }
-
-// Adapters — convert platform-specific items to EbayItem for the unified TryOn garment model
-
-private fun com.trymeon.app.data.remote.VintedItem.toEbayItem() = EbayItem(
-    itemId     = id,
-    title      = title,
-    price      = price,
-    currency   = currency,
-    imageUrl   = imageUrl,
-    itemWebUrl = itemUrl,
-    condition  = "Secondhand",
-    source     = "Vinted"
-)

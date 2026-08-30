@@ -1,5 +1,6 @@
 package com.trymeon.app.ui.screens.outfit
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,10 +31,9 @@ import androidx.compose.material.icons.filled.Checkroom
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ShoppingBag
 import com.trymeon.app.data.remote.ScraperApiService
-import com.trymeon.app.data.remote.AsosApiService
 import com.trymeon.app.data.remote.ClaudeApiService
-import com.trymeon.app.data.remote.EbayApiService
 import com.trymeon.app.data.remote.EbayItem
+import com.trymeon.app.ui.components.landedLabel
 import com.trymeon.app.data.remote.SerpApiService
 import com.trymeon.app.data.remote.WeatherInfo
 import com.trymeon.app.data.repository.UserProfileRepository
@@ -66,9 +66,8 @@ fun OutfitScreen(
     onNavigateToTryOn: () -> Unit = {},
     onNavigateToProfile: () -> Unit = {}
 ) {
-    val ebayService   = remember { EbayApiService() }
-    val asosService   = remember { AsosApiService() }
     val outfitContext = LocalContext.current
+    var refineOpen by remember { mutableStateOf(false) }
     val amazonService = remember { ScraperApiService() }
     val serpService   = remember { SerpApiService() }
     val vm: OutfitViewModel = viewModel(factory = object : androidx.lifecycle.ViewModelProvider.Factory {
@@ -76,7 +75,7 @@ fun OutfitScreen(
         override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
             OutfitViewModel(
                 wardrobeRepository, profileRepository, claudeApiService, apiKey,
-                ebayService, asosService, amazonService, ebayClientId, ebayClientSecret, rapidApiKey,
+                rapidApiKey,
                 serpService, scraperApiKey, serpApiKey,
                 catalog = com.trymeon.app.data.sourcing.ShoppingCatalogFactory.create(
                     outfitContext, claudeApiService, apiKey,
@@ -171,76 +170,102 @@ fun OutfitScreen(
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
 
-        // Mood picker
-        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Today's Mood", style = MaterialTheme.typography.titleMedium, color = Ink)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(
-                        onClick = onNavigateToEmergency,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text("⚡ Emergency", style = MaterialTheme.typography.labelSmall, color = Warm)
-                    }
-                    TextButton(
-                        onClick = onNavigateToRating,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text("⭐ Rate", style = MaterialTheme.typography.labelSmall, color = Ash)
-                    }
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(Mood.entries) { mood ->
-                    val selected = mood == state.mood
-                    FilterChip(
-                        selected = selected,
-                        onClick = { vm.selectMood(if (selected) null else mood) },
-                        label = { Text("${mood.emoji} ${mood.label}", style = MaterialTheme.typography.labelSmall) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Ink,
-                            selectedLabelColor = Color.White
-                        )
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Closet Only toggle
+        // Mood and "closet only" change the answer but are not needed to get
+        // one, and asking for both up front put roughly twenty choices between
+        // opening the tab and seeing an outfit. Folded away, and open in a tap.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(if (state.closetOnly) Color(0xFFF0F0F0) else Paper)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .clickable { refineOpen = !refineOpen }
+                .padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.Checkroom, null, tint = if (state.closetOnly) Ink else Ash, modifier = Modifier.size(16.dp))
-                Column {
-                    Text("Closet Only", style = MaterialTheme.typography.labelLarge, color = Ink)
-                    Text(
-                        if (state.closetOnly) "Using your wardrobe only" else "Mix wardrobe + basics",
-                        style = MaterialTheme.typography.labelSmall, color = Ash
-                    )
+            Text(
+                if (refineOpen) "Fewer options" else "Mood, closet only…",
+                style = MaterialTheme.typography.labelMedium, color = Ash
+            )
+            Text(if (refineOpen) "−" else "+", style = MaterialTheme.typography.bodyMedium, color = Ash)
+        }
+
+        AnimatedVisibility(visible = refineOpen) {
+            Column {
+            Spacer(Modifier.height(16.dp))
+
+            // Mood picker
+            Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Today's Mood", style = MaterialTheme.typography.titleMedium, color = Ink)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(
+                            onClick = onNavigateToEmergency,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text("⚡ Emergency", style = MaterialTheme.typography.labelSmall, color = Warm)
+                        }
+                        TextButton(
+                            onClick = onNavigateToRating,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text("⭐ Rate", style = MaterialTheme.typography.labelSmall, color = Ash)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(Mood.entries) { mood ->
+                        val selected = mood == state.mood
+                        FilterChip(
+                            selected = selected,
+                            onClick = { vm.selectMood(if (selected) null else mood) },
+                            label = { Text("${mood.emoji} ${mood.label}", style = MaterialTheme.typography.labelSmall) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Ink,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
                 }
             }
-            Switch(
-                checked = state.closetOnly,
-                onCheckedChange = { vm.toggleClosetOnly() },
-                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Ink)
-            )
+
+            Spacer(Modifier.height(16.dp))
+
+            // Closet Only toggle
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (state.closetOnly) Color(0xFFF0F0F0) else Paper)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Checkroom, null, tint = if (state.closetOnly) Ink else Ash, modifier = Modifier.size(16.dp))
+                    Column {
+                        Text("Closet Only", style = MaterialTheme.typography.labelLarge, color = Ink)
+                        Text(
+                            if (state.closetOnly) "Using your wardrobe only" else "Mix wardrobe + basics",
+                            style = MaterialTheme.typography.labelSmall, color = Ash
+                        )
+                    }
+                }
+                Switch(
+                    checked = state.closetOnly,
+                    onCheckedChange = { vm.toggleClosetOnly() },
+                    colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Ink)
+                )
+            }
+
+            }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -821,7 +846,7 @@ private fun OnlineItemThumb(item: EbayItem) {
                         .background(Color.Black.copy(alpha = 0.55f)).padding(vertical = 2.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("${item.currency} ${item.price}",
+                    Text(item.landedLabel(),
                         style = MaterialTheme.typography.labelSmall, color = Color.White)
                 }
             }
@@ -866,7 +891,7 @@ private fun WeatherCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 1.5.dp, color = Ash)
                 Spacer(Modifier.width(8.dp))
-                Text("Fetching weather…", style = MaterialTheme.typography.bodySmall, color = Ash)
+                Text("Checking the weather…", style = MaterialTheme.typography.bodySmall, color = Ash)
             }
         } else if (editingCity) {
             Row(verticalAlignment = Alignment.CenterVertically) {

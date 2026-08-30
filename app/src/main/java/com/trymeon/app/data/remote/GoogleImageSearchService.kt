@@ -11,6 +11,9 @@ object GoogleImageSearchService {
 
     private var apiKey: String = ""
     private var cx: String = ""
+
+    /** Whether a product-image lookup can happen at all. */
+    val configured: Boolean get() = apiKey.isNotBlank() && cx.isNotBlank()
     private val cache = ConcurrentHashMap<String, String>()
     private val client = RelayHttp.builder().build()
 

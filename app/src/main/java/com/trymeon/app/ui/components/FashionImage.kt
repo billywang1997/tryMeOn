@@ -14,6 +14,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
@@ -43,6 +46,9 @@ fun FashionImage(
     // Use LaunchedEffect + mutableStateOf — safe to use unconditionally unlike produceState
     // inside when-branches which violates Compose's rules-of-composables.
     var resolvedUrl by remember(model) { mutableStateOf<String?>(null) }
+    // Distinguishes "still looking" from "there is nothing to show", so a
+    // missing picture is a quiet placeholder rather than a permanent shimmer.
+    var unavailable by remember(model) { mutableStateOf(false) }
 
     LaunchedEffect(model) {
         resolvedUrl = null  // reset on model change
@@ -53,12 +59,23 @@ fun FashionImage(
             // not used for wardrobe essentials.
             model is String && (model.startsWith("amazon:") || model.startsWith("google:")) -> {
                 val q = model.substringAfter(':')
-                resolvedUrl = GoogleImageSearchService.resolveUrl(q)
-                    ?: UnsplashService.resolveUrl(cleanForUnsplash(q))
+                // Unsplash is an editorial photo library, not a catalogue: asked
+                // for "navy t-shirt" it returns a photograph of a person wearing
+                // one — and sometimes just a face. Presenting that as a garment
+                // in the user's closet is worse than showing nothing, so it is
+                // only a fallback for a lookup that could have worked. Without a
+                // product-image key there is no lookup, and the placeholder is
+                // the honest answer.
+                resolvedUrl = if (GoogleImageSearchService.configured) {
+                    GoogleImageSearchService.resolveUrl(q)
+                        ?: UnsplashService.resolveUrl(cleanForUnsplash(q))
+                } else null
+                unavailable = resolvedUrl == null
             }
             model is String && model.startsWith("unsplash:") -> {
                 val q = model.removePrefix("unsplash:")
                 resolvedUrl = UnsplashService.resolveUrl(q)
+                unavailable = resolvedUrl == null
             }
         }
     }
@@ -80,7 +97,20 @@ fun FashionImage(
         alpha = alpha,
         modifier = modifier,
         loading = {
-            Box(Modifier.fillMaxSize().background(Mist))
+            Box(
+                Modifier.fillMaxSize().background(Mist),
+                contentAlignment = Alignment.Center
+            ) {
+                if (unavailable) {
+                    Text(
+                        contentDescription.orEmpty().take(24),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Ash,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                }
+            }
         },
         error = {
             Box(

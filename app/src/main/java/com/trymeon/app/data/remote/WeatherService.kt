@@ -46,7 +46,14 @@ data class WeatherInfo(
 }
 
 object WeatherService {
-    private val client = OkHttpClient()
+    // Bounded, because the card that waits on this has no other way to stop
+    // saying "Fetching weather…". OkHttp's defaults are ten seconds each for
+    // connect and read, which on a dead network is a card that spins forever.
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(4, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(4, java.util.concurrent.TimeUnit.SECONDS)
+        .callTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
 
     /** Detect the user's city from their IP address using ipinfo.io (no API key required). */
     suspend fun detectCity(): String = withContext(Dispatchers.IO) {

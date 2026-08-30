@@ -14,6 +14,7 @@ import com.trymeon.app.domain.model.ClothingItem
 import com.trymeon.app.domain.model.SavedImage
 import com.trymeon.app.domain.model.UserProfile
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,9 +26,11 @@ import java.io.FileOutputStream
 class ProfileViewModel(
     private val profileRepository: UserProfileRepository,
     private val wardrobeRepository: WardrobeRepository,
-    private val authRepository: FirebaseAuthRepository,
-    private val firestoreRepository: FirestoreRepository,
-    private val storageRepository: FirebaseStorageRepository = FirebaseStorageRepository()
+    // Null when there is no cloud. Everything else on this screen — body,
+    // saved looks, price expectation, style — is local and must still work.
+    private val authRepository: FirebaseAuthRepository? = null,
+    private val firestoreRepository: FirestoreRepository? = null,
+    private val storageRepository: FirebaseStorageRepository? = null
 ) : ViewModel() {
 
     private val _profile = MutableStateFlow(UserProfile())
@@ -42,9 +45,13 @@ class ProfileViewModel(
     private val _authLoading = MutableStateFlow(false)
     val authLoading: StateFlow<Boolean> = _authLoading.asStateFlow()
 
-    val currentUser: StateFlow<AppUser?> = authRepository.currentUser.stateIn(
-        viewModelScope, SharingStarted.Eagerly, authRepository.currentUserSnapshot
-    )
+    /** Whether an account can be created or signed into at all. */
+    val cloudAvailable: Boolean = authRepository != null
+
+    val currentUser: StateFlow<AppUser?> =
+        (authRepository?.currentUser ?: flowOf(null)).stateIn(
+            viewModelScope, SharingStarted.Eagerly, authRepository?.currentUserSnapshot
+        )
 
     val savedImages: StateFlow<List<SavedImage>> = wardrobeRepository.getSavedImages()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -94,10 +101,11 @@ class ProfileViewModel(
         _authLoading.value = true
         _authError.value = null
         viewModelScope.launch {
-            val result = authRepository.createAccount(email, password, displayName)
+            val auth = authRepository ?: return@launch offline()
+            val result = auth.createAccount(email, password, displayName)
             result.onSuccess { user ->
-                firestoreRepository.saveUserMeta(user.uid, user.displayName, user.email, false, styles)
-                firestoreRepository.saveProfile(user.uid, _profile.value)
+                firestoreRepository?.saveUserMeta(user.uid, user.displayName, user.email, false, styles)
+                firestoreRepository?.saveProfile(user.uid, _profile.value)
             }
             result.onFailure { _authError.value = friendlyError(it.message) }
             _authLoading.value = false
@@ -108,7 +116,8 @@ class ProfileViewModel(
         _authLoading.value = true
         _authError.value = null
         viewModelScope.launch {
-            val result = authRepository.signIn(email, password)
+            val auth = authRepository ?: return@launch offline()
+            val result = auth.signIn(email, password)
             result.onFailure { _authError.value = friendlyError(it.message) }
             _authLoading.value = false
         }
@@ -118,9 +127,10 @@ class ProfileViewModel(
         _authLoading.value = true
         _authError.value = null
         viewModelScope.launch {
-            val result = authRepository.signInWithGoogle(idToken)
+            val auth = authRepository ?: return@launch offline()
+            val result = auth.signInWithGoogle(idToken)
             result.onSuccess { user ->
-                firestoreRepository.saveUserMeta(user.uid, user.displayName, user.email, false, styles)
+                firestoreRepository?.saveUserMeta(user.uid, user.displayName, user.email, false, styles)
             }
             result.onFailure { _authError.value = friendlyError(it.message) }
             _authLoading.value = false
@@ -129,14 +139,14 @@ class ProfileViewModel(
 
     fun updateDisplayName(name: String) {
         viewModelScope.launch {
-            authRepository.updateDisplayName(name)
+            (authRepository ?: return@launch offline()).updateDisplayName(name)
                 .onFailure { _authError.value = friendlyError(it.message) }
         }
     }
 
     fun updatePassword(newPassword: String) {
         viewModelScope.launch {
-            authRepository.updatePassword(newPassword)
+            (authRepository ?: return@launch offline()).updatePassword(newPassword)
                 .onSuccess { _saved.value = true }
                 .onFailure { _authError.value = friendlyError(it.message) }
         }
@@ -145,14 +155,20 @@ class ProfileViewModel(
     fun sendPasswordReset() {
         val email = currentUser.value?.email ?: return
         viewModelScope.launch {
-            authRepository.sendPasswordReset(email)
+            (authRepository ?: return@launch offline()).sendPasswordReset(email)
                 .onSuccess { _authError.value = "Reset email sent to $email" }
                 .onFailure { _authError.value = friendlyError(it.message) }
         }
     }
 
     fun signOut() {
-        authRepository.signOut()
+        authRepository?.signOut()
+    }
+
+    /** Says why nothing happened, instead of appearing to hang. */
+    private fun offline() {
+        _authError.value = "Accounts are unavailable on this build"
+        _authLoading.value = false
     }
 
     private fun friendlyError(msg: String?): String = when {

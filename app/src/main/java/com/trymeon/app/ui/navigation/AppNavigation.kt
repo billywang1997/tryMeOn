@@ -160,10 +160,6 @@ fun AppNavigation(
                     profileRepository = profileRepository,
                     wishlistRepository = wishlistRepository,
                     marketRepository = marketRepository,
-                    ebayClientId = ebayClientId,
-                    ebayClientSecret = ebayClientSecret,
-                    serpApiKey = serpApiKey,
-                    ebayAffiliateCampaignId = ebayAffiliateCampaignId,
                     onNavigateToCost      = { navController.navigate("cost") },
                     onNavigateToAudit     = { navController.navigate("audit") },
                     onNavigateToWishlist  = { navController.navigate("wishlist") },
@@ -177,11 +173,8 @@ fun AppNavigation(
                     claudeApiService    = claudeApiService,
                     apiKey              = apiKey,
                     contentPadding      = innerPadding,
-                    ebayClientId        = ebayClientId,
-                    ebayClientSecret    = ebayClientSecret,
                     rapidApiKey         = rapidApiKey,
                     scraperApiKey       = scraperApiKey,
-                    serpApiKey          = serpApiKey,
                     onNavigateToCalendar  = { navController.navigate("calendar") },
                     onNavigateToEmergency = { navController.navigate("emergency") },
                     onNavigateToRating    = { navController.navigate("rating") },
@@ -197,12 +190,8 @@ fun AppNavigation(
                     apiKey                   = apiKey,
                     replicateApiKey          = replicateApiKey,
                     contentPadding           = innerPadding,
-                    ebayClientId             = ebayClientId,
-                    ebayClientSecret         = ebayClientSecret,
                     rapidApiKey              = rapidApiKey,
                     scraperApiKey            = scraperApiKey,
-                    serpApiKey               = serpApiKey,
-                    ebayAffiliateCampaignId  = ebayAffiliateCampaignId,
                     amazonAssociateTag       = amazonAssociateTag,
                     styleKeywords            = styleKeywords
                 )
@@ -260,26 +249,22 @@ fun AppNavigation(
                 )
             }
             composable(Screen.Profile.route) {
-                val auth = authRepository
-                val fs = firestoreRepository
-                if (auth != null && fs != null) {
-                    ProfileScreen(
+                // Rendered whether or not there is a cloud. Body, style, price
+                // expectation and saved looks are local; gating the whole tab
+                // on an account left it blank.
+                ProfileScreen(
                         repository = profileRepository,
                         wardrobeRepository = wardrobeRepository,
-                        authRepository = auth,
-                        firestoreRepository = fs,
+                        authRepository = authRepository,
+                        firestoreRepository = firestoreRepository,
                         contentPadding = innerPadding,
                         claudeApiService = claudeApiService,
                         apiKey = apiKey,
-                        ebayClientId = ebayClientId,
-                        ebayClientSecret = ebayClientSecret,
-                        serpApiKey = serpApiKey,
-                        ebayAffiliateCampaignId = ebayAffiliateCampaignId,
                         styleKeywords = styleKeywords,
                         wishlistRepository = wishlistRepository,
-                        logRepository = logRepository
+                        logRepository = logRepository,
+                        onOpenFeature = { navController.navigate(it) }
                     )
-                }
             }
 
             // Feature routes
@@ -320,10 +305,6 @@ fun AppNavigation(
                     profileRepository  = profileRepository,
                     claudeService      = claudeApiService,
                     apiKey             = apiKey,
-                    ebayClientId       = ebayClientId,
-                    ebayClientSecret   = ebayClientSecret,
-                    serpApiKey         = serpApiKey,
-                    ebayAffiliateCampaignId = ebayAffiliateCampaignId,
                     styleKeywords      = styleKeywords,
                     wishlistRepository = wishlistRepository,
                     catalog            = com.trymeon.app.data.sourcing.ShoppingCatalogFactory.create(

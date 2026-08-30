@@ -4,9 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.trymeon.app.data.BasicWardrobeProvider
 import com.trymeon.app.data.remote.ScraperApiService
-import com.trymeon.app.data.remote.AsosApiService
 import com.trymeon.app.data.remote.ClaudeApiService
-import com.trymeon.app.data.remote.EbayApiService
 import com.trymeon.app.data.remote.EbayItem
 import com.trymeon.app.data.remote.SerpApiService
 import com.trymeon.app.data.remote.WeatherInfo
@@ -82,11 +80,6 @@ class OutfitViewModel(
     private val profileRepository: UserProfileRepository,
     private val claudeService: ClaudeApiService,
     private val apiKey: String,
-    private val ebayService: EbayApiService? = null,
-    private val asosService: AsosApiService? = null,
-    private val amazonService: ScraperApiService? = null,
-    private val ebayClientId: String = "",
-    private val ebayClientSecret: String = "",
     private val rapidApiKey: String = "",
     private val serpService: SerpApiService? = null,
     private val scraperApiKey: String = "",

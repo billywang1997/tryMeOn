@@ -129,14 +129,14 @@ private fun WelcomeStep(onNext: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                "MY",
+                "TRY",
                 color = Color.White.copy(alpha = 0.35f),
                 style = MaterialTheme.typography.titleMedium,
                 letterSpacing = 10.sp,
                 fontWeight = FontWeight.Light
             )
             Text(
-                "CLOSET",
+                "ME ON",
                 color = Color.White,
                 style = MaterialTheme.typography.displayMedium,
                 fontWeight = FontWeight.Bold,
@@ -273,7 +273,11 @@ private fun ProfileStep(
         if (uri != null) bodyUri = uri
     }
 
-    val canContinue = gender.isNotEmpty() && heightText.toIntOrNull() != null && weightText.toIntOrNull() != null
+    // Kept as the signal for the primary button's wording, not as a gate: a
+    // shopper who has not yet been shown anything has no reason to hand over
+    // their height and weight, and asking as a condition of entry loses them
+    // before the app has made its case. Everything here can be set later in ME.
+    val complete = gender.isNotEmpty() && heightText.toIntOrNull() != null && weightText.toIntOrNull() != null
 
     Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
         Column(
@@ -418,13 +422,17 @@ private fun ProfileStep(
                         onNext()
                     }
                 },
-                enabled = canContinue && !saving,
+                enabled = !saving,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Ink)
             ) {
                 if (saving) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
-                else Text("CONTINUE", style = MaterialTheme.typography.labelLarge, letterSpacing = 2.sp, color = Color.White)
+                else Text(
+                    if (complete) "CONTINUE" else "SKIP FOR NOW",
+                    style = MaterialTheme.typography.labelLarge,
+                    letterSpacing = 2.sp, color = Color.White
+                )
             }
         }
     }

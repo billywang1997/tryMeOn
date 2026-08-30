@@ -66,8 +66,10 @@ import com.trymeon.app.util.OpenLink
 fun ProfileScreen(
     repository: UserProfileRepository,
     wardrobeRepository: WardrobeRepository,
-    authRepository: FirebaseAuthRepository,
-    firestoreRepository: FirestoreRepository,
+    // Null without a cloud. The screen is mostly local settings and stays
+    // usable; only the account card changes.
+    authRepository: FirebaseAuthRepository? = null,
+    firestoreRepository: FirestoreRepository? = null,
     contentPadding: PaddingValues,
     claudeApiService: com.trymeon.app.data.remote.ClaudeApiService? = null,
     apiKey: String = "",
@@ -77,7 +79,16 @@ fun ProfileScreen(
     ebayAffiliateCampaignId: String = "",
     styleKeywords: Set<String> = emptySet(),
     wishlistRepository: com.trymeon.app.data.repository.WishlistRepository? = null,
-    logRepository: com.trymeon.app.data.repository.OutfitLogRepository? = null
+    logRepository: com.trymeon.app.data.repository.OutfitLogRepository? = null,
+    /**
+     * The rest of the app's features, listed in one predictable place.
+     *
+     * They used to be four chips in a clipped scrolling row on the closet and
+     * two ten-point text links beside "Today's Mood" — findable only by
+     * accident. They are all "things about my wardrobe over time", which is
+     * what this tab is.
+     */
+    onOpenFeature: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val settings = remember { AppSettings(context) }
@@ -167,6 +178,7 @@ fun ProfileScreen(
         // ── Account card ─────────────────────────────────────────────────
         AccountCard(
             user = currentUser,
+            cloudAvailable = vm.cloudAvailable,
             authLoading = authLoading,
             onSignIn = { showAuthDialog = AuthDialogMode.SIGN_IN },
             onCreateAccount = { showAuthDialog = AuthDialogMode.CREATE },
@@ -195,23 +207,29 @@ fun ProfileScreen(
             )
         }
 
+        // ── Everything else ──────────────────────────────────────────────
+        Spacer(Modifier.height(20.dp))
+        ProfileSection("More") {
+            Column {
+                FeatureRow("Closet audit", "What your wardrobe is missing, and why", "audit", onOpenFeature)
+                FeatureRow("Wishlist", "Saved items, watched for price drops", "wishlist", onOpenFeature)
+                FeatureRow("Streaks", "How long you have gone without repeating", "streak", onOpenFeature)
+                FeatureRow("Cost per wear", "What each piece has actually cost you", "cost", onOpenFeature)
+                FeatureRow("Outfit calendar", "What you wore, day by day", "calendar", onOpenFeature)
+                FeatureRow("Emergency outfit", "One good answer, fast", "emergency", onOpenFeature)
+                FeatureRow("Rate my outfit", "Scored on colour and occasion", "rating", onOpenFeature)
+            }
+        }
+
         // ── Style Twin (aha + affiliate) ─────────────────────────────────
         if (claudeApiService != null && apiKey.isNotBlank() && wardrobeItems.isNotEmpty()) {
             Spacer(Modifier.height(20.dp))
-            val ebaySvc = remember { com.trymeon.app.data.remote.EbayApiService() }
-            val serpSvc = remember { com.trymeon.app.data.remote.SerpApiService() }
             com.trymeon.app.ui.components.StyleTwinCard(
                 wardrobe = wardrobeItems,
                 styleKeywords = styleKeywords,
                 gender = profile.gender,
                 apiKey = apiKey,
                 claudeService = claudeApiService,
-                ebayService = ebaySvc,
-                ebayClientId = ebayClientId,
-                ebayClientSecret = ebayClientSecret,
-                serpService = serpSvc,
-                serpApiKey = serpApiKey,
-                ebayAffiliateCampaignId = ebayAffiliateCampaignId,
                 wishlistRepository = wishlistRepository,
                 catalog = com.trymeon.app.data.sourcing.ShoppingCatalogFactory.create(
                     context, claudeApiService, apiKey,
@@ -489,6 +507,8 @@ fun ProfileScreen(
 @Composable
 private fun AccountCard(
     user: AppUser?,
+    /** False when this build has no cloud; sign-in buttons would do nothing. */
+    cloudAvailable: Boolean,
     authLoading: Boolean,
     onSignIn: () -> Unit,
     onCreateAccount: () -> Unit,
@@ -507,6 +527,21 @@ private fun AccountCard(
         if (authLoading) {
             Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = Ink)
+            }
+            return@Surface
+        }
+
+        // Saying so beats offering a button that cannot work. Everything else
+        // on this screen is stored on the device and is unaffected.
+        if (!cloudAvailable) {
+            Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                Text("Signed out", style = MaterialTheme.typography.titleSmall, color = Ink)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Accounts and cloud backup are unavailable on this build. " +
+                        "Your wardrobe and settings are saved on this device.",
+                    style = MaterialTheme.typography.bodySmall, color = Ash
+                )
             }
             return@Surface
         }
@@ -1087,4 +1122,28 @@ fun AmazonKeysDialog(accessKey: String, secretKey: String, associateTag: String,
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Ash) } }
     )
+}
+
+/** One line in the "More" list: a name, what it is for, and where it goes. */
+@Composable
+private fun FeatureRow(
+    title: String,
+    subtitle: String,
+    route: String,
+    onOpen: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onOpen(route) }
+            .padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = Ink)
+            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = Ash)
+        }
+        Text("→", style = MaterialTheme.typography.bodyMedium, color = Ash)
+    }
+    HorizontalDivider(color = Mist)
 }

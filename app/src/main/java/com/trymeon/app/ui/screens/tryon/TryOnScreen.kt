@@ -45,10 +45,9 @@ import kotlinx.coroutines.launch
 import com.trymeon.app.data.BasicWardrobeProvider
 import com.trymeon.app.data.remote.ScraperApiService
 import com.trymeon.app.data.remote.ClaudeApiService
-import com.trymeon.app.data.remote.EbayApiService
 import com.trymeon.app.data.remote.EbayItem
+import com.trymeon.app.ui.components.landedLabel
 import com.trymeon.app.data.remote.ReplicateApiService
-import com.trymeon.app.data.remote.VintedApiService
 import com.trymeon.app.data.repository.UserProfileRepository
 import com.trymeon.app.data.repository.WardrobeRepository
 import com.trymeon.app.domain.model.ClothingCategory
@@ -84,10 +83,6 @@ fun TryOnScreen(
 ) {
     val context = LocalContext.current
     val replicateService = remember { ReplicateApiService() }
-    val ebayService  = remember { EbayApiService() }
-    val amazonService = remember { ScraperApiService() }
-    val vintedService = remember { VintedApiService() }
-    val serpService   = remember { com.trymeon.app.data.remote.SerpApiService() }
     val vm: TryOnViewModel = viewModel(factory = object : androidx.lifecycle.ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
@@ -95,15 +90,8 @@ fun TryOnScreen(
                 wardrobeRepository, profileRepository,
                 claudeApiService, replicateService,
                 apiKey, replicateApiKey,
-                ebayService, ebayClientId, ebayClientSecret,
-                amazonService = amazonService, rapidApiKey = rapidApiKey,
-                vintedService = vintedService,
-                ebayAffiliateCampaignId = ebayAffiliateCampaignId,
                 amazonAssociateTag = amazonAssociateTag,
                 styleKeywords = styleKeywords,
-                scraperApiKey = scraperApiKey,
-                serpService = serpService,
-                serpApiKey = serpApiKey,
                 catalog = com.trymeon.app.data.sourcing.ShoppingCatalogFactory.create(
                     context, claudeApiService, apiKey, rapidApiKey
                 ),
@@ -770,7 +758,7 @@ private fun EbayGarmentThumb(
                     .background(Color.Black.copy(alpha = 0.55f)).padding(vertical = 2.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("${item.currency} ${item.price}", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                Text(item.landedLabel(), style = MaterialTheme.typography.labelSmall, color = Color.White)
             }
         }
     }

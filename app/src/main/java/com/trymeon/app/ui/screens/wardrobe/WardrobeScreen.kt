@@ -29,7 +29,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.trymeon.app.data.BasicWardrobeProvider
-import com.trymeon.app.data.remote.EbayApiService
 import com.trymeon.app.data.remote.SerpApiService
 import com.trymeon.app.data.repository.MarketRepository
 import com.trymeon.app.data.repository.OutfitLogRepository
@@ -112,7 +111,6 @@ fun WardrobeScreen(
         )
     }
 
-    val ebayService = remember { EbayApiService() }
     val serpService = remember { SerpApiService() }
 
     rememberShakeDetector {
@@ -136,7 +134,7 @@ fun WardrobeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "WARDROBE",
+                    "CLOSET",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Light
                 )
@@ -176,10 +174,11 @@ fun WardrobeScreen(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Two, so they fit without clipping. The full list — streaks,
+                // cost per wear, the outfit calendar and the rest — is in the
+                // ME tab, where a user looks for their own data.
                 item { FeatureChip("✨ AI Audit", onNavigateToAudit) }
                 item { FeatureChip("🤍 Wishlist", onNavigateToWishlist) }
-                item { FeatureChip("🔥 Streaks", onNavigateToStreak) }
-                item { FeatureChip("💰 Cost Tracker", onNavigateToCost) }
             }
 
             HorizontalDivider(color = Mist)
@@ -285,12 +284,6 @@ fun WardrobeScreen(
                 gender = profile?.gender.orEmpty(),
                 apiKey = apiKey,
                 claudeService = claudeApiService,
-                ebayService = ebayService,
-                ebayClientId = ebayClientId,
-                ebayClientSecret = ebayClientSecret,
-                serpService = serpService,
-                serpApiKey = serpApiKey,
-                ebayAffiliateCampaignId = ebayAffiliateCampaignId,
                 wishlistRepository = wishlistRepository,
                 outfitLogs = logs,
                 catalog = com.trymeon.app.data.sourcing.ShoppingCatalogFactory.create(
@@ -340,7 +333,7 @@ fun BasicsHeader() {
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
-                "WARDROBE ESSENTIALS",
+                "ESSENTIALS",
                 style = MaterialTheme.typography.labelMedium,
                 color = Ash
             )

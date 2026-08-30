@@ -35,7 +35,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.trymeon.app.data.remote.ClaudeApiService
-import com.trymeon.app.data.remote.EbayApiService
 import com.trymeon.app.data.remote.EbayItem
 import com.trymeon.app.data.remote.SerpApiService
 import com.trymeon.app.data.repository.WishlistRepository
@@ -89,12 +88,6 @@ fun CompleteTheLookSheet(
     apiKey: String,
     catalog: com.trymeon.app.data.sourcing.ShoppingCatalog,
     claudeService: ClaudeApiService,
-    ebayService: EbayApiService,
-    ebayClientId: String,
-    ebayClientSecret: String,
-    serpService: SerpApiService,
-    serpApiKey: String,
-    ebayAffiliateCampaignId: String,
     wishlistRepository: WishlistRepository? = null,
     outfitLogs: List<OutfitLog> = emptyList(),
     onDismiss: () -> Unit
@@ -449,7 +442,7 @@ private fun ProductCard(
             )
             if (item.price.isNotBlank()) {
                 Text(
-                    "${item.currency} ${item.price}",
+                    item.landedLabel(),
                     style = MaterialTheme.typography.labelMedium,
                     color = Warm, fontWeight = FontWeight.SemiBold
                 )

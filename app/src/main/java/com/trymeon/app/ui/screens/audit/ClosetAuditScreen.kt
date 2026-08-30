@@ -49,7 +49,6 @@ import androidx.activity.ComponentActivity
 import com.trymeon.app.AppSettings
 import com.trymeon.app.data.billing.BillingManager
 import com.trymeon.app.data.remote.ClaudeApiService
-import com.trymeon.app.data.remote.EbayApiService
 import com.trymeon.app.data.remote.EbayItem
 import com.trymeon.app.data.remote.SerpApiService
 import com.trymeon.app.data.repository.UserProfileRepository
@@ -127,10 +126,6 @@ fun ClosetAuditScreen(
     catalog: com.trymeon.app.data.sourcing.ShoppingCatalog,
     claudeService: ClaudeApiService,
     apiKey: String,
-    ebayClientId: String,
-    ebayClientSecret: String,
-    serpApiKey: String,
-    ebayAffiliateCampaignId: String,
     styleKeywords: Set<String>,
     wishlistRepository: WishlistRepository? = null,
     onSourceIt: (String) -> Unit = {},
@@ -138,8 +133,6 @@ fun ClosetAuditScreen(
 ) {
     val context = LocalContext.current
     val settings = remember { AppSettings(context) }
-    val ebayService = remember { EbayApiService() }
-    val serpService = remember { SerpApiService() }
     val scope = rememberCoroutineScope()
 
     val billing = remember { BillingManager(context.applicationContext) }

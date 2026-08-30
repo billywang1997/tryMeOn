@@ -97,4 +97,22 @@ class AliExpressParserTest {
         val body = ok.replace(""""product_id":"1005006123456789",""", "")
         assertEquals(emptyList<TaobaoItem>(), AliExpressParser.parse(body).getOrThrow())
     }
+
+    @Test
+    fun `a listing is marked as delivered, priced locally, and named`() {
+        val item = AliExpressParser.parse(ok).getOrThrow().single()
+
+        // Each of these decides money or wording downstream, and each is one
+        // line in the parser that nothing else would notice the loss of.
+        //
+        // deliveredPrice routes the listing to the two-line cost model; drop it
+        // and an already-taxed price gets our freight and GST added on top.
+        assertTrue("a ship-to quote is delivered", item.deliveredPrice)
+        // currency stops the quoter converting a price that is already local,
+        // which at the CNY rate would cut it to a fifth.
+        assertEquals("AUD", item.currency)
+        // marketplace is what the card, the try-on strip and the saved wishlist
+        // record call it, and decides whether the link may be rewritten.
+        assertEquals("AliExpress", item.marketplace)
+    }
 }

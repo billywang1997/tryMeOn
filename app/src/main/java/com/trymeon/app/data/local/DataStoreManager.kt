@@ -1,7 +1,9 @@
 package com.trymeon.app.data.local
 
 import android.content.Context
+import androidx.annotation.VisibleForTesting
 import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -38,17 +40,18 @@ class DataStoreManager(private val context: Context) {
         val json = prefs[KEY_CLOTHING] ?: return@map emptyList()
         val type = object : TypeToken<List<ClothingItemDto>>() {}.type
         val dtos: List<ClothingItemDto> = gson.fromJson(json, type) ?: emptyList()
-        dtos.map { it.toDomain() }
+        dtos.mapNotNull { it.toDomain() }
     }
 
     suspend fun addClothing(item: ClothingItem): Long {
         var assignedId = 0L
         context.dataStore.edit { prefs ->
-            val current = readClothingList(prefs).toMutableList()
+            val stored = readStoredClothing(prefs)
+            val current = stored.readable.toMutableList()
             val nextId = (prefs[KEY_NEXT_ID]?.toLongOrNull() ?: 1L)
             assignedId = nextId
             current.add(0, item.copy(id = nextId))
-            prefs[KEY_CLOTHING] = gson.toJson(current.map { it.toDto() })
+            writeClothing(prefs, current, stored.unreadable)
             prefs[KEY_NEXT_ID] = (nextId + 1).toString()
         }
         return assignedId
@@ -56,24 +59,32 @@ class DataStoreManager(private val context: Context) {
 
     suspend fun deleteClothing(itemId: Long) {
         context.dataStore.edit { prefs ->
-            val current = readClothingList(prefs).filter { it.id != itemId }
-            prefs[KEY_CLOTHING] = gson.toJson(current.map { it.toDto() })
+            val stored = readStoredClothing(prefs)
+            writeClothing(prefs, stored.readable.filter { it.id != itemId }, stored.unreadable)
         }
     }
 
     suspend fun updateClothing(item: ClothingItem) {
         context.dataStore.edit { prefs ->
-            val current = readClothingList(prefs).map { if (it.id == item.id) item else it }
-            prefs[KEY_CLOTHING] = gson.toJson(current.map { it.toDto() })
+            val stored = readStoredClothing(prefs)
+            writeClothing(
+                prefs,
+                stored.readable.map { if (it.id == item.id) item else it },
+                stored.unreadable
+            )
         }
     }
 
     suspend fun toggleFavorite(itemId: Long) {
         context.dataStore.edit { prefs ->
-            val current = readClothingList(prefs).map {
-                if (it.id == itemId) it.copy(isFavorite = !it.isFavorite) else it
-            }
-            prefs[KEY_CLOTHING] = gson.toJson(current.map { it.toDto() })
+            val stored = readStoredClothing(prefs)
+            writeClothing(
+                prefs,
+                stored.readable.map {
+                    if (it.id == itemId) it.copy(isFavorite = !it.isFavorite) else it
+                },
+                stored.unreadable
+            )
         }
     }
 
@@ -85,11 +96,30 @@ class DataStoreManager(private val context: Context) {
         return result
     }
 
-    private fun readClothingList(prefs: Preferences): List<ClothingItem> {
-        val json = prefs[KEY_CLOTHING] ?: return emptyList()
+    private fun readClothingList(prefs: Preferences): List<ClothingItem> =
+        readStoredClothing(prefs).readable
+
+    /**
+     * The stored wardrobe, split into what this build can read and what it
+     * cannot.
+     *
+     * Every write here is a read-modify-write over the whole list, so a row
+     * that fails to convert has to survive the round trip explicitly. Drop it
+     * on read and adding one garment silently deletes another.
+     */
+    private fun readStoredClothing(prefs: Preferences): StoredClothing {
+        val json = prefs[KEY_CLOTHING] ?: return StoredClothing(emptyList(), emptyList())
         val type = object : TypeToken<List<ClothingItemDto>>() {}.type
         val dtos: List<ClothingItemDto> = gson.fromJson(json, type) ?: emptyList()
-        return dtos.map { it.toDomain() }
+        val readable = mutableListOf<ClothingItem>()
+        val unreadable = mutableListOf<ClothingItemDto>()
+        dtos.forEach { dto -> dto.toDomain()?.let(readable::add) ?: unreadable.add(dto) }
+        return StoredClothing(readable, unreadable)
+    }
+
+    /** Serialises [items] without losing rows this build could not interpret. */
+    private fun writeClothing(prefs: MutablePreferences, items: List<ClothingItem>, kept: List<ClothingItemDto>) {
+        prefs[KEY_CLOTHING] = gson.toJson(items.map { it.toDto() } + kept)
     }
 
     // --- Profile ---
@@ -184,18 +214,61 @@ class DataStoreManager(private val context: Context) {
         }
     }
 
+    // --- Raw access, for tests that need to plant a record this build did not
+    // write. Reading storage as it actually is, rather than as the current
+    // model describes it, is the only way to check backward compatibility.
+
+    @VisibleForTesting
+    suspend fun readRawClothingJson(): String {
+        var json = "[]"
+        context.dataStore.edit { json = it[KEY_CLOTHING] ?: "[]" }
+        return json
+    }
+
+    @VisibleForTesting
+    suspend fun writeRawClothingJson(json: String) {
+        context.dataStore.edit { it[KEY_CLOTHING] = json }
+    }
+
+    @VisibleForTesting
+    suspend fun readRawWishlistJson(): String {
+        var json = "[]"
+        context.dataStore.edit { json = it[KEY_WISHLIST] ?: "[]" }
+        return json
+    }
+
+    @VisibleForTesting
+    suspend fun writeRawWishlistJson(json: String) {
+        context.dataStore.edit { it[KEY_WISHLIST] = json }
+    }
+
     // --- Wishlist ---
     val wishlistFlow: Flow<List<WishlistItem>> = context.dataStore.data.map { prefs ->
         val json = prefs[KEY_WISHLIST] ?: return@map emptyList()
+        readWishlist(json)
+    }
+
+    /**
+     * Reads stored wishlist JSON, filling in fields an older build never wrote.
+     *
+     * Gson does not run Kotlin constructor defaults: a field absent from the
+     * JSON is left null even though the declared type is non-null, and nothing
+     * checks it again. The screen renders `source.uppercase()`, so a record
+     * saved before `source` existed crashes the wishlist rather than showing an
+     * unlabelled row. Every other model here goes through a DTO for the same
+     * reason; this one is coerced in place.
+     */
+    private fun readWishlist(json: String): List<WishlistItem> {
         val type = object : TypeToken<List<WishlistItem>>() {}.type
-        gson.fromJson<List<WishlistItem>>(json, type) ?: emptyList()
+        val raw: List<WishlistItem> = gson.fromJson(json, type) ?: return emptyList()
+        return raw.map { it.withDefaults() }
     }
 
     suspend fun saveWishlistItem(item: WishlistItem) {
         context.dataStore.edit { prefs ->
-            val type = object : TypeToken<List<WishlistItem>>() {}.type
-            val current: MutableList<WishlistItem> =
-                gson.fromJson(prefs[KEY_WISHLIST] ?: "[]", type) ?: mutableListOf()
+            // Coerced on the way in, so a legacy record is repaired rather
+            // than written back out with its nulls intact.
+            val current = readWishlist(prefs[KEY_WISHLIST] ?: "[]").toMutableList()
             current.removeAll { it.id == item.id }
             current.add(0, item)
             prefs[KEY_WISHLIST] = gson.toJson(current)
@@ -204,9 +277,9 @@ class DataStoreManager(private val context: Context) {
 
     suspend fun removeWishlistItem(itemId: String) {
         context.dataStore.edit { prefs ->
-            val type = object : TypeToken<List<WishlistItem>>() {}.type
-            val current: MutableList<WishlistItem> =
-                gson.fromJson(prefs[KEY_WISHLIST] ?: "[]", type) ?: mutableListOf()
+            // Coerced on the way in, so a legacy record is repaired rather
+            // than written back out with its nulls intact.
+            val current = readWishlist(prefs[KEY_WISHLIST] ?: "[]").toMutableList()
             current.removeAll { it.id == itemId }
             prefs[KEY_WISHLIST] = gson.toJson(current)
         }
@@ -255,6 +328,30 @@ class DataStoreManager(private val context: Context) {
 }
 
 // --- DTOs ---
+/**
+ * Replaces nulls Gson left behind with the defaults the constructor declares.
+ *
+ * Written out field by field because that is the only way to be sure: a
+ * reflective pass would have to guess which nulls were meant.
+ */
+@Suppress("USELESS_ELVIS")
+private fun WishlistItem.withDefaults() = copy(
+    title = title ?: "",
+    imageUrl = imageUrl ?: "",
+    itemWebUrl = itemWebUrl ?: "",
+    source = source ?: "",
+    currency = currency ?: "AUD",
+    savedPrice = savedPrice ?: "",
+    lastSeenPrice = lastSeenPrice ?: "",
+    query = query ?: ""
+)
+
+/** A stored wardrobe as this build sees it; see [DataStoreManager.readStoredClothing]. */
+private data class StoredClothing(
+    val readable: List<ClothingItem>,
+    val unreadable: List<ClothingItemDto>
+)
+
 private data class ClothingItemDto(
     val id: Long,
     val imagePath: String,
@@ -268,19 +365,31 @@ private data class ClothingItemDto(
     val isFavorite: Boolean = false,
     val cloudImageUrl: String? = null
 ) {
-    fun toDomain() = ClothingItem(
-        id = id,
-        imagePath = imagePath ?: "",
-        category = ClothingCategory.valueOf(category),
-        name = name ?: "",
-        color = color ?: "",
-        brand = brand ?: "",
-        notes = notes ?: "",
-        price = price,
-        createdAt = createdAt,
-        isFavorite = isFavorite,
-        cloudImageUrl = cloudImageUrl ?: ""
-    )
+    /**
+     * Null when the row cannot be read as a garment.
+     *
+     * Categories are stored by enum name, and `valueOf` throws on one this
+     * build does not have — a downgrade, or a sync from a newer device. The
+     * read maps over the whole list, so an exception here costs the user their
+     * entire wardrobe to spare them one unreadable row. Dropping the row is
+     * the smaller loss and the recoverable one.
+     */
+    fun toDomain(): ClothingItem? {
+        val known = ClothingCategory.entries.firstOrNull { it.name == category } ?: return null
+        return ClothingItem(
+            id = id,
+            imagePath = imagePath ?: "",
+            category = known,
+            name = name ?: "",
+            color = color ?: "",
+            brand = brand ?: "",
+            notes = notes ?: "",
+            price = price,
+            createdAt = createdAt,
+            isFavorite = isFavorite,
+            cloudImageUrl = cloudImageUrl ?: ""
+        )
+    }
 }
 
 private data class SavedImageDto(

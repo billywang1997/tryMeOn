@@ -81,7 +81,9 @@ object RelayHttp {
      * a stable uid to meter against.
      */
     private fun idToken(): String? {
-        val auth = FirebaseAuth.getInstance()
+        // No cloud means no token, which the caller reports as "not signed in"
+        // rather than dying inside an interceptor.
+        val auth = com.trymeon.app.data.auth.CloudIdentity.auth() ?: return null
         val user = auth.currentUser ?: runCatching {
             Tasks.await(auth.signInAnonymously(), 20, TimeUnit.SECONDS).user
         }.onFailure { Log.e(TAG, "anonymous sign-in failed: ${it.message}") }.getOrNull()

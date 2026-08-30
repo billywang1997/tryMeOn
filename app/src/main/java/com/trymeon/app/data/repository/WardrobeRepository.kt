@@ -5,7 +5,7 @@ import com.trymeon.app.data.remote.FirebaseStorageRepository
 import com.trymeon.app.data.remote.FirestoreRepository
 import com.trymeon.app.domain.model.ClothingItem
 import com.trymeon.app.domain.model.SavedImage
-import com.google.firebase.auth.FirebaseAuth
+import com.trymeon.app.data.auth.CloudIdentity
 import kotlinx.coroutines.flow.Flow
 
 class WardrobeRepository(
@@ -14,7 +14,9 @@ class WardrobeRepository(
     private val storageRepo: FirebaseStorageRepository? = null
 ) {
 
-    private val uid get() = FirebaseAuth.getInstance().currentUser?.uid
+    // Null when there is no cloud, rather than throwing: sync is optional
+    // and every path below already handles not having a uid.
+    private val uid get() = CloudIdentity.uid()
 
     fun getAllClothing(): Flow<List<ClothingItem>> = store.clothingFlow
 

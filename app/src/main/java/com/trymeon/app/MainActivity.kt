@@ -40,14 +40,19 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        FirebaseApp.initializeApp(this)
+        // Returns null when there is no configuration to start from. Cloud sync
+        // is a convenience on top of a local wardrobe, so the app carries on
+        // without it rather than refusing to open — which is also what happens
+        // to a user whose first launch has no network.
+        val cloud = FirebaseApp.initializeApp(this) != null
+        if (!cloud) android.util.Log.w("MainActivity", "no Firebase: running local-only")
 
         deepLinkRoute.value = intent?.getStringExtra("deep_link_route")
         requestNotificationPermissionIfNeeded()
 
         val store = DataStoreManager(this)
-        val firestoreRepo = FirestoreRepository()
-        val storageRepo = FirebaseStorageRepository()
+        val firestoreRepo = if (cloud) FirestoreRepository() else null
+        val storageRepo = if (cloud) FirebaseStorageRepository() else null
         val wardrobeRepo = WardrobeRepository(store, firestoreRepo, storageRepo)
         val profileRepo = UserProfileRepository(store, firestoreRepo, storageRepo)
         val wishlistRepo = com.trymeon.app.data.repository.WishlistRepository(store, firestoreRepo)
@@ -55,22 +60,24 @@ class MainActivity : ComponentActivity() {
         com.trymeon.app.notifications.NotificationHelper.ensureChannels(this)
         com.trymeon.app.notifications.NotificationScheduler.apply(this)
         val claudeService = ClaudeApiService(this)
-        val authRepo = FirebaseAuthRepository(this)
+        val authRepo = if (cloud) FirebaseAuthRepository(this) else null
         val settings = AppSettings(this)
-        val syncManager = CloudSyncManager(store, firestoreRepo, settings)
+        val syncManager = firestoreRepo?.let { CloudSyncManager(store, it, settings) }
         UnsplashService.init(settings.unsplashAccessKey)
         GoogleImageSearchService.init(settings.googleSearchApiKey, settings.googleSearchEngineId)
         AmazonImageSearchService.init(settings.amazonAccessKey, settings.amazonSecretKey, settings.amazonAssociateTag)
         com.trymeon.app.util.Affiliate.init(settings.skimlinksId, settings.sovrnSiteId)
         com.trymeon.app.util.Daigou.init(settings.daigouProviders, settings.preferredDaigouId)
 
-        lifecycleScope.launch {
-            val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-            if (currentUser == null) {
-                authRepo.signInAnonymously()
-            } else {
-                // Restore from cloud if local cache is empty (new device / reinstall)
-                syncManager.restoreIfEmpty(currentUser.uid)
+        if (cloud) {
+            lifecycleScope.launch {
+                val currentUser = com.trymeon.app.data.auth.CloudIdentity.currentUser()
+                if (currentUser == null) {
+                    authRepo?.signInAnonymously()
+                } else {
+                    // Restore from cloud if local cache is empty (new device / reinstall)
+                    syncManager?.restoreIfEmpty(currentUser.uid)
+                }
             }
         }
 

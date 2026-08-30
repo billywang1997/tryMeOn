@@ -4,14 +4,16 @@ import com.trymeon.app.data.local.DataStoreManager
 import com.trymeon.app.data.remote.EbayItem
 import com.trymeon.app.data.remote.FirestoreRepository
 import com.trymeon.app.domain.model.WishlistItem
-import com.google.firebase.auth.FirebaseAuth
+import com.trymeon.app.data.auth.CloudIdentity
 import kotlinx.coroutines.flow.Flow
 
 class WishlistRepository(
     private val store: DataStoreManager,
     private val firestoreRepo: FirestoreRepository? = null
 ) {
-    private val uid get() = FirebaseAuth.getInstance().currentUser?.uid
+    // Null when there is no cloud, rather than throwing: sync is optional
+    // and every path below already handles not having a uid.
+    private val uid get() = CloudIdentity.uid()
 
     fun observe(): Flow<List<WishlistItem>> = store.wishlistFlow
 

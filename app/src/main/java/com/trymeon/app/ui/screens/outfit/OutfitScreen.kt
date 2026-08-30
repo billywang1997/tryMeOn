@@ -108,7 +108,7 @@ fun OutfitScreen(
             Text("OOTD", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Light)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    state.wardrobe.size.let { if (it > 0) "$it ITEMS" else "BASICS" },
+                    state.wardrobe.size.let { if (it > 0) "$it ITEM" + (if (it == 1) "" else "S") else "BASICS" },
                     style = MaterialTheme.typography.labelMedium, color = Ash
                 )
                 Spacer(Modifier.width(8.dp))

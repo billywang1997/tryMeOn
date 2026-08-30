@@ -17,7 +17,7 @@ import com.android.billingclient.api.acknowledgePurchase
 import com.android.billingclient.api.queryProductDetails
 import com.android.billingclient.api.queryPurchasesAsync
 import com.trymeon.app.AppSettings
-import com.google.firebase.auth.FirebaseAuth
+import com.trymeon.app.data.auth.CloudIdentity
 import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -149,7 +149,7 @@ class BillingManager(private val context: Context) : PurchasesUpdatedListener {
     }
 
     private suspend fun grantServerEntitlement(purchase: Purchase) {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid
+        val uid = CloudIdentity.uid()
         if (uid == null) {
             Log.d(TAG, "not signed in — deferring entitlement to next start")
             return

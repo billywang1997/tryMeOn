@@ -13,11 +13,16 @@ private const val TAG = "MarketRepo"
 private const val COL = "market_listings"
 
 class MarketRepository {
-    private val db = FirebaseFirestore.getInstance()
+    // Resolved on use, not on construction. The marketplace is one screen; a
+    // missing or unstarted Firebase should cost the user that screen, not stop
+    // the app from opening.
+    private val db: FirebaseFirestore?
+        get() = runCatching { FirebaseFirestore.getInstance() }.getOrNull()
 
     /** All active listings, newest first. */
     fun observeAll(): Flow<List<MarketListing>> = callbackFlow {
-        val reg = db.collection(COL)
+        val store = db ?: run { trySend(emptyList()); awaitClose { }; return@callbackFlow }
+        val reg = store.collection(COL)
             .whereEqualTo("sold", false)
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .limit(60)
@@ -30,7 +35,8 @@ class MarketRepository {
     }
 
     fun observeMine(uid: String): Flow<List<MarketListing>> = callbackFlow {
-        val reg = db.collection(COL)
+        val store = db ?: run { trySend(emptyList()); awaitClose { }; return@callbackFlow }
+        val reg = store.collection(COL)
             .whereEqualTo("sellerUid", uid)
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snap, err ->
@@ -42,19 +48,23 @@ class MarketRepository {
     }
 
     suspend fun post(listing: MarketListing): Result<String> = runCatching {
-        val ref = db.collection(COL).document()
+        val ref = requireCloud().collection(COL).document()
         val toSave = listing.copy(id = ref.id)
         ref.set(toSave).await()
         ref.id
     }
 
     suspend fun markSold(id: String): Result<Unit> = runCatching {
-        db.collection(COL).document(id).update("sold", true).await()
+        requireCloud().collection(COL).document(id).update("sold", true).await()
         Unit
     }
 
     suspend fun delete(id: String): Result<Unit> = runCatching {
-        db.collection(COL).document(id).delete().await()
+        requireCloud().collection(COL).document(id).delete().await()
         Unit
     }
+
+    /** Inside runCatching, so "no cloud" reaches the caller as a failed Result. */
+    private fun requireCloud(): FirebaseFirestore =
+        db ?: error("The marketplace needs a signed-in cloud account")
 }

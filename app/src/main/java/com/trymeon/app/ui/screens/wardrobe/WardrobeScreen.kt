@@ -141,7 +141,7 @@ fun WardrobeScreen(
                     fontWeight = FontWeight.Light
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${allClothing.size} ITEMS", style = MaterialTheme.typography.labelMedium, color = Ash)
+                    Text("${allClothing.size} ITEM" + if (allClothing.size == 1) "" else "S", style = MaterialTheme.typography.labelMedium, color = Ash)
                     Spacer(Modifier.width(4.dp))
                     if (allClothing.size >= 2) {
                         IconButton(
@@ -541,62 +541,6 @@ fun ClothingCard(
             }
         )
     }
-}
-
-@Composable
-fun AddClothingDialog(onDismiss: () -> Unit, onConfirm: (ClothingCategory, String, String, Double) -> Unit) {
-    var selectedCategory by remember { mutableStateOf(ClothingCategory.INNER) }
-    var name by remember { mutableStateOf("") }
-    var color by remember { mutableStateOf("") }
-    var price by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text("ADD ITEM", style = MaterialTheme.typography.titleMedium)
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text("Category", style = MaterialTheme.typography.labelMedium, color = Ash)
-                CategoryChips(selected = selectedCategory, onSelect = { selectedCategory = it })
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Name (optional)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
-                )
-                OutlinedTextField(
-                    value = color,
-                    onValueChange = { color = it },
-                    label = { Text("Color (optional)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
-                )
-                OutlinedTextField(
-                    value = price,
-                    onValueChange = { price = it.filter { c -> c.isDigit() || c == '.' } },
-                    label = { Text("Purchase price (optional)") },
-                    prefix = { Text("$") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp)
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(selectedCategory, name, color, price.toDoubleOrNull() ?: 0.0) },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Ink)
-            ) { Text("Add") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel", color = Ash) }
-        }
-    )
 }
 
 @Composable

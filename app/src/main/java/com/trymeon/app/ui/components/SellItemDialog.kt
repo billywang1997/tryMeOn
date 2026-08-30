@@ -38,7 +38,7 @@ import com.trymeon.app.ui.theme.Ink
 import com.trymeon.app.ui.theme.Mist
 import com.trymeon.app.ui.theme.Paper
 import com.trymeon.app.ui.theme.Warm
-import com.google.firebase.auth.FirebaseAuth
+import com.trymeon.app.data.auth.CloudIdentity
 import kotlinx.coroutines.launch
 
 @Composable
@@ -57,7 +57,8 @@ fun SellItemDialog(
     var posting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
 
-    val user = remember { FirebaseAuth.getInstance().currentUser }
+    // Null without a cloud; the dialog already asks the user to sign in.
+    val user = remember { CloudIdentity.currentUser() }
     val canPost = user != null && !user.isAnonymous
     // Listing image must be a cloud URL so other shoppers can load it.
     // A local file path (cloudImageUrl not yet synced) would be unreadable to them.

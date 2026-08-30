@@ -51,6 +51,7 @@ import com.trymeon.app.domain.model.ClothingCategory
 import com.trymeon.app.domain.model.ClothingItem
 import com.trymeon.app.domain.sourcing.DaigouAgent
 import com.trymeon.app.domain.sourcing.MarketBenchmark
+import com.trymeon.app.domain.sourcing.ShippingRoute
 import com.trymeon.app.domain.sourcing.SourcingDefaults
 import com.trymeon.app.ui.theme.Ash
 import com.trymeon.app.ui.theme.Ink
@@ -169,11 +170,16 @@ fun SourceItScreen(
 
             result?.let { res ->
                 item { TranslationCard(res) }
-                item {
-                    Settings(
-                        agent = agent, onAgent = { agent = it },
-                        cardPercent = cardPercent, onCardPercent = { cardPercent = it }
-                    )
+                // A forwarder fee is a choice only where a forwarder is involved.
+                // When every listing is delivered by its seller these chips
+                // change nothing, and offering them implies otherwise.
+                if (items.any { it.quotes.any { q -> q.line.route != ShippingRoute.PLATFORM_QUOTED } }) {
+                    item {
+                        Settings(
+                            agent = agent, onAgent = { agent = it },
+                            cardPercent = cardPercent, onCardPercent = { cardPercent = it }
+                        )
+                    }
                 }
                 items(items, key = { it.listing.itemId + it.listing.title.take(8) }) { item ->
                     val id = item.listing.itemId + item.listing.title.take(8)
@@ -253,7 +259,9 @@ private fun SearchField(value: String, onValue: (String) -> Unit, onSearch: () -
 private fun Intro(gaps: List<ClosetGap>, onPick: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(22.dp), modifier = Modifier.padding(top = 12.dp)) {
         Text(
-            "Say it in English.\nWe search Taobao in Chinese,\nand price it to your door.",
+            // Named no marketplace: which one answers depends on what is
+            // configured, and the promise is the same either way.
+            "Say it in English.\nWe search in Chinese,\nand price it to your door in dollars.",
             style = MaterialTheme.typography.headlineSmall,
             color = Ink,
             lineHeight = 34.sp

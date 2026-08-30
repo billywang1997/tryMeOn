@@ -88,6 +88,9 @@ fun SourceItScreen(
     localPrices: AuMarketPrices? = null,
     wardrobe: List<ClothingItem> = emptyList(),
     gender: String = "",
+    /** With [fitLooks], shows how this kind of garment sat on similar bodies. */
+    profile: com.trymeon.app.domain.model.UserProfile? = null,
+    fitLooks: com.trymeon.app.data.repository.FitLookRepository? = null,
     initialQuery: String = "",
     categoryHint: ClothingCategory? = null,
     contentPadding: PaddingValues = PaddingValues(0.dp),
@@ -117,6 +120,8 @@ fun SourceItScreen(
 
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
+    val sharedLooks by (fitLooks?.observeRecent() ?: kotlinx.coroutines.flow.flowOf(emptyList()))
+        .collectAsState(emptyList())
 
     // Quoting is pure arithmetic over listings we already have, so switching
     // agent re-prices instantly instead of re-running a paid search.
@@ -225,6 +230,19 @@ fun SourceItScreen(
 
             result?.let { res ->
                 item { TranslationCard(res) }
+                if (fitLooks != null) {
+                    item {
+                        com.trymeon.app.ui.components.FitAlikeStrip(
+                            looks = sharedLooks,
+                            profile = profile,
+                            category = res.query.category,
+                            keywords = com.trymeon.app.domain.model.FitLook.keywordsOf(
+                                res.query.englishSummary.ifBlank { query }
+                            ),
+                            title = "ON PEOPLE YOUR SIZE"
+                        )
+                    }
+                }
                 // A forwarder fee is a choice only where a forwarder is involved.
                 // When every listing is delivered by its seller these chips
                 // change nothing, and offering them implies otherwise.

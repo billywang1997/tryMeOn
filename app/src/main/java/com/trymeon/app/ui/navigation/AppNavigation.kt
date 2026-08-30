@@ -64,6 +64,8 @@ fun AppNavigation(
     profileRepository: UserProfileRepository,
     wishlistRepository: com.trymeon.app.data.repository.WishlistRepository? = null,
     marketRepository: com.trymeon.app.data.repository.MarketRepository? = null,
+    /** Null without a cloud; the "people your size" strips simply do not appear. */
+    fitLookRepository: com.trymeon.app.data.repository.FitLookRepository? = null,
     claudeApiService: ClaudeApiService,
     apiKey: String,
     replicateApiKey: String,
@@ -192,7 +194,9 @@ fun AppNavigation(
                     rapidApiKey              = rapidApiKey,
                     scraperApiKey            = scraperApiKey,
                     amazonAssociateTag       = amazonAssociateTag,
-                    styleKeywords            = styleKeywords
+                    styleKeywords            = styleKeywords,
+                    fitLooks                 = fitLookRepository,
+                    authRepository           = authRepository
                 )
             }
             composable(
@@ -245,6 +249,8 @@ fun AppNavigation(
                         )
                     },
                     gender = profile?.gender.orEmpty(),
+                    profile = profile,
+                    fitLooks = fitLookRepository,
                     initialQuery = prefilled,
                     onTryOn = {
                         navController.navigate(Screen.TryOn.route) { launchSingleTop = true }
@@ -267,6 +273,7 @@ fun AppNavigation(
                         styleKeywords = styleKeywords,
                         wishlistRepository = wishlistRepository,
                         logRepository = logRepository,
+                        fitLooks = fitLookRepository,
                         onOpenFeature = { navController.navigate(it) }
                     )
             }

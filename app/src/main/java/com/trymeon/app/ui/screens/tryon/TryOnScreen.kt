@@ -79,7 +79,10 @@ fun TryOnScreen(
     serpApiKey: String = "",
     ebayAffiliateCampaignId: String = "",
     amazonAssociateTag: String = "",
-    styleKeywords: Set<String> = emptySet()
+    styleKeywords: Set<String> = emptySet(),
+    /** Null without a cloud: no strip, no share button. */
+    fitLooks: com.trymeon.app.data.repository.FitLookRepository? = null,
+    authRepository: com.trymeon.app.data.auth.FirebaseAuthRepository? = null
 ) {
     val context = LocalContext.current
     val replicateService = remember { ReplicateApiService() }
@@ -107,6 +110,26 @@ fun TryOnScreen(
     })
 
     val state by vm.uiState.collectAsState()
+
+    // Shared looks from bodies like this one. One subscription for the tab;
+    // matching is done on the device so the strip and the dialog agree.
+    val sharedLooks by (fitLooks?.observeRecent() ?: kotlinx.coroutines.flow.flowOf(emptyList()))
+        .collectAsState(emptyList())
+    var shareFitPath by remember { mutableStateOf<String?>(null) }
+    shareFitPath?.let { path ->
+        val uid = authRepository?.currentUserSnapshot?.uid.orEmpty()
+        val worn = state.selectedGarments.values.map { it.displayLabel }
+        com.trymeon.app.ui.components.ShareFitDialog(
+            imagePath = path,
+            uid = uid,
+            profile = state.profile,
+            repository = fitLooks!!,
+            garmentSuggestion = worn.joinToString(", "),
+            categorySuggestion = state.selectedGarments.values.firstOrNull()?.slotCategory,
+            onPosted = { shareFitPath = null },
+            onDismiss = { shareFitPath = null }
+        )
+    }
 
     // The ViewModel picks this up in init, but only on first creation — coming
     // back to an already-built tab would otherwise drop the garment silently.
@@ -196,6 +219,15 @@ fun TryOnScreen(
                     onRegenerate = { vm.regenerateModel() }
                 )
             }
+        }
+
+        if (fitLooks != null) {
+            Spacer(Modifier.height(20.dp))
+            com.trymeon.app.ui.components.FitAlikeStrip(
+                looks = sharedLooks,
+                profile = state.profile,
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
         }
 
         Spacer(Modifier.height(28.dp))
@@ -317,7 +349,8 @@ fun TryOnScreen(
                 credits = state.shareCredits,
                 imageSaved = state.imageSaved,
                 promptSignInToBackup = state.promptSignInToBackup,
-                onSave = { path -> vm.saveImage(path) }
+                onSave = { path -> vm.saveImage(path) },
+                onShareFit = if (fitLooks != null) { path -> shareFitPath = path } else null
             )
         }
 
@@ -806,7 +839,9 @@ fun TryOnResult(
     credits: List<ShareCardRenderer.Credit> = emptyList(),
     imageSaved: Boolean = false,
     promptSignInToBackup: Boolean = false,
-    onSave: ((String) -> Unit)? = null
+    onSave: ((String) -> Unit)? = null,
+    /** Publishes the current angle to people of this build; null hides the button. */
+    onShareFit: ((String) -> Unit)? = null
 ) {
     val pagerState = rememberPagerState { views.size.coerceAtLeast(1) }
     val scope = rememberCoroutineScope()
@@ -1013,6 +1048,22 @@ fun TryOnResult(
                 shareError, style = MaterialTheme.typography.labelSmall, color = Ash,
                 modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center
             )
+        }
+
+        // Publishing to people of the same build is a different act from
+        // sharing to a chat: it carries the wearer's numbers, so it is its
+        // own, quieter button and asks again before it sends.
+        if (onShareFit != null && views.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            val currentPath = views.getOrElse(pagerState.currentPage) { views.first() }
+            OutlinedButton(
+                onClick = { onShareFit(currentPath) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Ink)
+            ) {
+                Text("Share your fit with people your size", style = MaterialTheme.typography.labelLarge)
+            }
         }
 
         if (analysis.isNotEmpty()) {

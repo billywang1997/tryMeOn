@@ -121,7 +121,13 @@ fun WardrobeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(bottom = contentPadding.calculateBottomPadding())
+            // Both edges. Taking only the bottom left the header drawing under
+            // the status bar, so the screen title sat on top of the clock — on
+            // the first screen the app opens.
+            .padding(
+                top = contentPadding.calculateTopPadding(),
+                bottom = contentPadding.calculateBottomPadding()
+            )
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header

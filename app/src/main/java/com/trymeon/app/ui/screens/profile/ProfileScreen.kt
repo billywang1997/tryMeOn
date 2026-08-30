@@ -82,6 +82,7 @@ fun ProfileScreen(
     styleKeywords: Set<String> = emptySet(),
     wishlistRepository: com.trymeon.app.data.repository.WishlistRepository? = null,
     logRepository: com.trymeon.app.data.repository.OutfitLogRepository? = null,
+    fitLooks: com.trymeon.app.data.repository.FitLookRepository? = null,
     /**
      * The rest of the app's features, listed in one predictable place.
      *
@@ -475,13 +476,29 @@ fun ProfileScreen(
         )
     }
 
+    var shareFitLook by remember { mutableStateOf<SavedImage?>(null) }
     selectedLook?.let { look ->
         val allItems = remember(wardrobeItems) { wardrobeItems + BasicWardrobeProvider.items }
         LookDetailSheet(
             image = look,
             allItems = allItems,
             onDelete = { vm.deleteSavedImage(look.id); selectedLook = null },
-            onDismiss = { selectedLook = null }
+            onDismiss = { selectedLook = null },
+            onShareFit = if (fitLooks != null && look.type == "tryon") {
+                { shareFitLook = look; selectedLook = null }
+            } else null
+        )
+    }
+    shareFitLook?.let { look ->
+        com.trymeon.app.ui.components.ShareFitDialog(
+            imagePath = look.path,
+            uid = currentUser?.uid.orEmpty(),
+            profile = profile,
+            repository = fitLooks!!,
+            garmentSuggestion = look.note.substringAfter("·", "").trim()
+                .replace(Regex("(Wardrobe|Essential|Secondhand): "), ""),
+            onPosted = { shareFitLook = null },
+            onDismiss = { shareFitLook = null }
         )
     }
 
@@ -942,7 +959,8 @@ private fun LookDetailSheet(
     image: SavedImage,
     allItems: List<ClothingItem>,
     onDelete: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onShareFit: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val itemIds = remember(image.note) { parseLookItemIds(image.note) }
@@ -998,11 +1016,18 @@ private fun LookDetailSheet(
                                 Text(date, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.5f))
                             }
                         }
-                        TextButton(
-                            onClick = onDelete,
-                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                        ) {
-                            Text("Remove", style = MaterialTheme.typography.labelMedium)
+                        Row {
+                            if (onShareFit != null) {
+                                TextButton(onClick = onShareFit) {
+                                    Text("Share fit", style = MaterialTheme.typography.labelMedium, color = Color.White)
+                                }
+                            }
+                            TextButton(
+                                onClick = onDelete,
+                                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Text("Remove", style = MaterialTheme.typography.labelMedium)
+                            }
                         }
                     }
 

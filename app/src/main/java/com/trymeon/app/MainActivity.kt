@@ -7,6 +7,8 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import android.graphics.Color
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateOf
@@ -38,7 +40,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // The app is light by design — an editorial white, with no dark palette
+        // to switch to. Left to itself, edge-to-edge follows the system theme
+        // and hands the status bar light icons, which then sit invisibly on that
+        // white. Both bars are pinned to the app's own appearance instead.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+        )
 
         // Returns null when there is no configuration to start from. Cloud sync
         // is a convenience on top of a local wardrobe, so the app carries on
@@ -57,6 +66,7 @@ class MainActivity : ComponentActivity() {
         val profileRepo = UserProfileRepository(store, firestoreRepo, storageRepo)
         val wishlistRepo = com.trymeon.app.data.repository.WishlistRepository(store, firestoreRepo)
         val marketRepo = com.trymeon.app.data.repository.MarketRepository()
+        val fitLookRepo = if (cloud) com.trymeon.app.data.repository.FitLookRepository() else null
         com.trymeon.app.notifications.NotificationHelper.ensureChannels(this)
         com.trymeon.app.notifications.NotificationScheduler.apply(this)
         val claudeService = ClaudeApiService(this)
@@ -88,6 +98,7 @@ class MainActivity : ComponentActivity() {
                     profileRepository = profileRepo,
                     wishlistRepository = wishlistRepo,
                     marketRepository = marketRepo,
+                    fitLookRepository = fitLookRepo,
                     claudeApiService = claudeService,
                     apiKey = settings.claudeApiKey,
                     replicateApiKey = settings.fashnApiKey,

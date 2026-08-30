@@ -120,6 +120,9 @@ object AliExpressParser {
                         ),
                         shop = o.optString("shop_name"),
                         currency = "AUD",
+                        // ship_to_country=AU, so the quote is delivered and taxed.
+                        deliveredPrice = true,
+                        marketplace = "AliExpress",
                         sold = o.optString("lastest_volume").toIntOrNull() ?: 0,
                         source = TaobaoSource.AFFILIATE
                     )

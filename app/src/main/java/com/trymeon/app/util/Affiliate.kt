@@ -32,6 +32,11 @@ object Affiliate {
         // eBay / Amazon handled by their own affiliate wrappers
         val s = source.lowercase()
         if ("ebay" in s || "amazon" in s) return url
+        // An AliExpress promotion link already carries our tracking id. Sending
+        // it through a third-party monetiser would strip the attribution the
+        // link exists for, so it is left exactly as the API returned it. Matched
+        // on the host too, in case a row reaches here mislabelled.
+        if ("aliexpress" in s || "aliexpress.com" in url.lowercase()) return url
 
         val haveSkim = skimlinksId.isNotBlank()
         val haveSovrn = sovrnSiteId.isNotBlank()

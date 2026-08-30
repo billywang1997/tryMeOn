@@ -40,7 +40,22 @@ data class TaobaoItem(
      * asked for the buyer's own currency and answers in it. Converting a price
      * that is already local would divide it by the exchange rate.
      */
-    val currency: String = "CNY"
+    val currency: String = "CNY",
+    /**
+     * True when [price] already covers delivery to the buyer and whatever tax
+     * the platform collects, as AliExpress quotes it. Such a listing must not
+     * be charged our freight, GST or forwarder fees a second time.
+     *
+     * Deliberately separate from [currency]: a marketplace can quote a
+     * delivered price in yuan, or a domestic price in the buyer's currency.
+     */
+    val deliveredPrice: Boolean = false,
+    /**
+     * The marketplace this listing belongs to, as shown to the user. Several
+     * sources now feed this type, and labelling an AliExpress listing "Taobao"
+     * is both wrong on the card and wrong in the saved wishlist record.
+     */
+    val marketplace: String = "Taobao"
 )
 
 /**

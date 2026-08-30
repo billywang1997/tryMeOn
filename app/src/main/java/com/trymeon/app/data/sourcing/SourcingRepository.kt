@@ -82,7 +82,12 @@ object SourcingQuoter {
         cardSettlementPercent: Double = SourcingDefaults.DEFAULT_CARD_SETTLEMENT_PERCENT,
         lines: List<ShippingLine> = SourcingDefaults.lines
     ): List<SourcedItem> = result.listings.map { sourced ->
-        val quotes = lines.map { line ->
+        // Decided per listing, not per search: a result can mix a marketplace
+        // that delivers with one that quotes a domestic price, and pricing the
+        // first with the second's freight would invent a cost nobody pays.
+        val effectiveLines =
+            if (sourced.listing.deliveredPrice) listOf(SourcingDefaults.platformQuoted) else lines
+        val quotes = effectiveLines.map { line ->
             // Taobao's own route has no forwarder in it, so it carries no
             // service or payment fee whatever agent the user has picked.
             val effectiveAgent =
@@ -112,7 +117,15 @@ object SourcingQuoter {
             listing = sourced.listing,
             priceCny = sourced.priceCny,
             quotes = quotes,
-            orderUrl = Daigou.orderUrl(sourced.listing.itemUrl)
+            // A seller that ships to the buyer is ordered from directly. Wrapping
+            // its link in a forwarding agent's template would send the buyer to an
+            // agent they do not need, and would destroy the affiliate attribution
+            // the link carries.
+            orderUrl = if (sourced.listing.deliveredPrice) {
+                sourced.listing.itemUrl.ifBlank { null }
+            } else {
+                Daigou.orderUrl(sourced.listing.itemUrl)
+            }
         )
     }
 }

@@ -60,8 +60,11 @@ class YourModelTest {
     @Test
     fun onceBuiltItExplainsWhyItIsKept() {
         render(path = "/nonexistent/portrait.png", building = false)
-        // The promise the whole feature exists to make.
-        compose.onNodeWithText("Every try-on is this same person").assertIsDisplayed()
+        // The promise the whole feature exists to make. Matched as a substring:
+        // the line also carries a trailing affordance hint, and the promise is
+        // what this test is about.
+        compose.onNodeWithText("Every try-on is this same person", substring = true)
+            .assertIsDisplayed()
         compose.onNodeWithText("Redo").assertIsDisplayed()
         save("model_ready.png")
     }

@@ -138,12 +138,15 @@ fun SourcedItem.asProductRow(): EbayItem = EbayItem(
     title = listing.title,
     price = "%.2f".format(bestTotalAud),
     currency = "AUD",
-    condition = if (listing.source == TaobaoSource.AFFILIATE) "Taobao" else "Taobao · unofficial",
+    // Naming the marketplace the listing actually came from: the same row type
+    // now carries AliExpress as well, and "unofficial" is about provenance.
+    condition = if (listing.source == TaobaoSource.AFFILIATE) listing.marketplace
+        else "${listing.marketplace} · unofficial",
     imageUrl = listing.imageUrl,
     // The agent deep link when one is configured, else the listing itself —
     // better an honest product page than a link that pays nobody.
     itemWebUrl = orderUrl ?: listing.itemUrl,
-    source = "Taobao"
+    source = listing.marketplace
 )
 
 /**

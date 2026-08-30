@@ -1,6 +1,7 @@
 package com.trymeon.app.data.sourcing
 
 import android.util.Log
+import com.trymeon.app.data.remote.EbayItem
 import com.trymeon.app.data.remote.SerpApiService
 import com.trymeon.app.domain.sourcing.MarketBenchmark
 import com.trymeon.app.notifications.PriceMatcher
@@ -41,16 +42,28 @@ class AuMarketPrices(
             val results = serp.search(serpApiKey, englishQuery, limit = 20).getOrNull().orEmpty()
             // Only listings that are plausibly the same kind of thing. Without
             // this a search for a blazer prices itself against phone cases.
-            val wanted = PriceMatcher.tokens(englishQuery)
-            val comparable = results
-                .filter { wanted.isEmpty() || PriceMatcher.tokens(it.title).containsAll(wanted) }
-                .mapNotNull { parsePrice(it.price) }
-            MarketBenchmark.from(comparable)
+            MarketBenchmark.from(comparablePrices(results, englishQuery))
         }.onFailure { Log.w(TAG, "benchmark '$englishQuery' failed: ${it.message}") }
             .getOrNull()
 
         synchronized(cache) { cache[key] = Entry(benchmark, now()) }
         return benchmark
+    }
+
+    /**
+     * The prices from [results] that belong in a median for [englishQuery].
+     *
+     * Two filters, both load-bearing. Without the title filter a search for a
+     * blazer prices itself against phone cases. Without the currency filter a
+     * US seller on the Australian results page contributes a number of a
+     * different kind, pulling the median down and the claimed saving with it.
+     */
+    internal fun comparablePrices(results: List<EbayItem>, englishQuery: String): List<Double> {
+        val wanted = PriceMatcher.tokens(englishQuery)
+        return results
+            .filter { wanted.isEmpty() || PriceMatcher.tokens(it.title).containsAll(wanted) }
+            .filter { it.currency.isBlank() || it.currency == "AUD" }
+            .mapNotNull { parsePrice(it.price) }
     }
 
     private fun parsePrice(raw: String): Double? =

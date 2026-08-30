@@ -35,7 +35,7 @@ object PendingTryOn {
                 currency = "AUD",
                 imageUrl = item.imageUrl,
                 itemWebUrl = item.itemUrl,
-                source = "Taobao"
+                source = item.marketplace
             ),
             category = category
         )

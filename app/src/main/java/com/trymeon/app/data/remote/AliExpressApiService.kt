@@ -119,6 +119,7 @@ object AliExpressParser {
                                 .ifEmpty { o.optString("product_detail_url") }
                         ),
                         shop = o.optString("shop_name"),
+                        currency = "AUD",
                         sold = o.optString("lastest_volume").toIntOrNull() ?: 0,
                         source = TaobaoSource.AFFILIATE
                     )

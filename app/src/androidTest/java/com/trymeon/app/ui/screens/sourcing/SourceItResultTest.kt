@@ -67,6 +67,39 @@ class SourceItResultTest {
         agent = SourcingDefaults.defaultAgent
     )
 
+    /**
+     * The other shape that ships: a source that delivers and quotes the price
+     * itself, so there is one route and nothing to add but the card margin.
+     */
+    private val platformQuoted = SourcingQuoter.quote(
+        SourcingResult(
+            query = SourcingQuery(
+                chineseQueries = listOf("linen blazer"),
+                englishSummary = "Cropped linen blazer",
+                category = ClothingCategory.OUTERWEAR,
+                parcel = Parcel(30.0, 25.0, 10.0, actualGrams = 400)
+            ),
+            listings = listOf(
+                SourcedListing(
+                    TaobaoItem(
+                        itemId = "2",
+                        title = "Women Linen Blazer Cropped Casual Suit Jacket",
+                        price = "48.64",
+                        // Quoted in the buyer's own currency, as AliExpress does.
+                        currency = "AUD",
+                        shop = "Fashion Store",
+                        sold = 842
+                    ),
+                    48.64
+                )
+            ),
+            usedQuery = "linen blazer",
+            // A real rate, to prove it is not applied to a price already local.
+            fxRate = FxRate(0.207, System.currentTimeMillis(), "ECB")
+        ),
+        lines = listOf(SourcingDefaults.platformQuoted)
+    )
+
     @Test
     fun expandedCardShowsEveryRouteAndTheLandedTotal() {
         compose.setContent {
@@ -141,5 +174,44 @@ class SourceItResultTest {
             .fetchSemanticsNodes()
         assertTrue("must not invent a saving", claims.isEmpty())
         compose.onRoot().save("saving_absent.png")
+    }
+
+    @Test
+    fun aDeliveredPriceLeadsWithTheLocalComparison() {
+        compose.setContent {
+            Column(Modifier.fillMaxSize().background(Color.White).padding(20.dp)) {
+                ListingCard(
+                    item = platformQuoted.single(),
+                    benchmark = MarketBenchmark(typicalAud = 189.0, sampleSize = 14),
+                    expanded = true,
+                    onToggle = {}
+                )
+            }
+        }
+
+        // With one route there is no spread to weigh, so the ledger that exists
+        // to compare routes must not appear and imply a choice.
+        compose.onAllNodes(androidx.compose.ui.test.hasText("EVERY ROUTE"))
+            .fetchSemanticsNodes()
+            .let { assertTrue("a one-route ledger implies a choice that is not there", it.isEmpty()) }
+
+        // The comparison against local retail is what carries the argument now.
+        compose.onNodeWithText("below the usual price here").assertIsDisplayed()
+
+        // The seller charges A$48.64; a yuan "from" price would be one we made up.
+        compose.onNodeWithText("A$50.10", substring = true).assertIsDisplayed()
+        compose.onAllNodes(androidx.compose.ui.test.hasText("¥", substring = true))
+            .fetchSemanticsNodes()
+            .let { assertTrue("no invented yuan price on a locally-quoted listing", it.isEmpty()) }
+        compose.onNodeWithText("Card FX", substring = true).assertIsDisplayed()
+
+        // Nothing invented on top of a price the seller already delivered.
+        listOf("Freight", "GST", "service fee").forEach { absent ->
+            compose.onAllNodes(androidx.compose.ui.test.hasText(absent, substring = true))
+                .fetchSemanticsNodes()
+                .let { assertTrue("$absent must not be added to a delivered price", it.isEmpty()) }
+        }
+
+        compose.onRoot().save("card_platform_quoted.png")
     }
 }

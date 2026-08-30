@@ -93,7 +93,10 @@ object SourcingQuoter {
                 parcel = result.query.parcel,
                 agent = effectiveAgent,
                 line = line,
-                cnyToAud = result.fxRate.rate,
+                // A source that quotes in the buyer's own currency needs no
+                // conversion; applying the CNY rate would cut the price to a
+                // fifth of what the seller actually charges.
+                cnyToAud = if (sourced.listing.currency == "AUD") 1.0 else result.fxRate.rate,
                 gst = gst,
                 cardSettlementPercent = cardSettlementPercent
             )

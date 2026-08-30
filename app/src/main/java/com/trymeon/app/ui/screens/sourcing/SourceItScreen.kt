@@ -496,11 +496,12 @@ internal fun ListingCard(
                 }
                 Spacer(Modifier.height(2.dp))
                 PriceReveal(item)
-                LocalComparison(item, benchmark)
                 Text(
                     "${best.line.name} · ${best.cost.estimatedDays.first}–${best.cost.estimatedDays.last} days",
                     style = MaterialTheme.typography.labelSmall, color = Ash
                 )
+                Spacer(Modifier.height(4.dp))
+                LocalComparison(item, benchmark)
             }
         }
 
@@ -512,7 +513,10 @@ internal fun ListingCard(
             exit = fadeOut(tween(100)) + shrinkVertically(tween(150))
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                RouteLedger(item)
+                // With one route there is no spread to weigh up, and a
+                // one-row "every route" table would imply a choice the buyer
+                // does not actually have.
+                if (item.quotes.size > 1) RouteLedger(item)
                 Breakdown(best)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (onTryOn != null) {
@@ -550,12 +554,18 @@ internal fun ListingCard(
 private fun PriceReveal(item: SourcedItem) {
     val multiplier = item.best.cost.multiplier
     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            "¥${"%.0f".format(item.priceCny)}",
-            style = MaterialTheme.typography.bodyMedium, color = Ash
-        )
-        Text("→", style = MaterialTheme.typography.bodyMedium, color = Warm,
-            modifier = Modifier.padding(bottom = 2.dp))
+        // Only show the "from" price where there was a conversion to show. A
+        // source that already quotes in the buyer's currency has no yuan price,
+        // and inventing one by dividing back through the rate would be a number
+        // no seller ever charged.
+        if (item.listing.currency != "AUD") {
+            Text(
+                "¥${"%.0f".format(item.priceCny)}",
+                style = MaterialTheme.typography.bodyMedium, color = Ash
+            )
+            Text("→", style = MaterialTheme.typography.bodyMedium, color = Warm,
+                modifier = Modifier.padding(bottom = 2.dp))
+        }
         Text(
             "A$${"%.2f".format(item.bestTotalAud)}",
             style = MaterialTheme.typography.headlineSmall, color = Ink
@@ -700,23 +710,35 @@ private fun LocalComparison(item: SourcedItem, benchmark: MarketBenchmark?) {
     val saving = benchmark?.savingPercentAgainst(item.bestTotalAud) ?: return
 
     Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFFF1F5F2))
+            .padding(horizontal = 12.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-        modifier = Modifier.padding(top = 3.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // A hairline rather than a badge: the number is the point, and a loud
-        // chip here would read like a discount sticker rather than a finding.
-        Box(Modifier.width(2.dp).height(13.dp).background(Sage))
         Text(
-            "$saving% under",
-            style = MaterialTheme.typography.labelMedium,
+            "$saving%",
+            style = MaterialTheme.typography.titleMedium,
             color = Sage,
-            fontWeight = FontWeight.Medium
+            fontWeight = FontWeight.SemiBold
         )
-        Text(
-            "similar here · A$${"%.0f".format(benchmark.typicalAud)}",
-            style = MaterialTheme.typography.labelSmall,
-            color = Ash
-        )
+        Column {
+            Text(
+                "below the usual price here",
+                style = MaterialTheme.typography.labelMedium,
+                color = Sage
+            )
+            Text(
+                // Named as a comparison against similar items, never the same
+                // one: matching an exact product across two markets is not
+                // possible, and implying it would be the larger claim.
+                "similar sell for about A$${"%.0f".format(benchmark.typicalAud)} " +
+                    "· ${benchmark.sampleSize} listings",
+                style = MaterialTheme.typography.labelSmall,
+                color = Ash
+            )
+        }
     }
 }

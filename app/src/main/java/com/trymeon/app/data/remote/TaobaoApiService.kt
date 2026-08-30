@@ -34,7 +34,13 @@ data class TaobaoItem(
     /** Units sold — the closest thing Taobao gives to a trust signal. */
     val sold: Int = 0,
     /** Where this record came from, so the UI can be honest about data quality. */
-    val source: TaobaoSource = TaobaoSource.SCRAPER
+    val source: TaobaoSource = TaobaoSource.SCRAPER,
+    /**
+     * ISO code [price] is denominated in. Taobao publishes yuan; AliExpress is
+     * asked for the buyer's own currency and answers in it. Converting a price
+     * that is already local would divide it by the exchange rate.
+     */
+    val currency: String = "CNY"
 )
 
 /**

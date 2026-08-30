@@ -98,6 +98,22 @@ object SourcingDefaults {
         estimatedDays = 35..60
     )
 
+    /**
+     * A source that ships to the buyer itself and quotes the delivered price.
+     * There is nothing here for us to compute beyond the card's margin.
+     */
+    val platformQuoted = ShippingLine(
+        id = "platform",
+        name = "Shipped by the seller",
+        firstWeightPriceCny = 0.0,
+        firstWeightGrams = 0,
+        additionalPriceCny = 0.0,
+        additionalStepGrams = 0,
+        estimatedDays = 7..20,
+        note = "Price already includes the seller's shipping and any tax they collect.",
+        route = ShippingRoute.PLATFORM_QUOTED
+    )
+
     /** Taobao's own route first: for a qualifying listing it is usually the answer. */
     val lines = listOf(officialAirPickup, officialAirHome, officialSea, forwarderAir, forwarderSea)
 

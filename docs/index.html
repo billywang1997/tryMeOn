@@ -70,29 +70,36 @@
 <div class="wrap">
 
   <div class="hero">
-    <h1>A ¥128 jacket is not an A$26 jacket.</h1>
+    <h1>Is that actually cheaper than buying it here?</h1>
     <p class="lede">
       tryMeOn is an Android wardrobe assistant for shoppers in Australia. It recommends
-      what to buy from the clothes you already own, works out what a cross-border listing
-      actually costs delivered to your door in AUD, and shows the garment on you before
-      you spend anything.
+      what to buy from the clothes you already own, prices a cross-border listing all the
+      way to the door in AUD, checks it against what similar garments sell for locally,
+      and shows the piece on you before you spend anything.
     </p>
   </div>
 
   <section>
     <p class="label">The problem</p>
-    <h2>Cross-border prices are quoted in a currency, not a cost.</h2>
+    <h2>A listing price answers the wrong question.</h2>
     <p>
-      A shopper in Sydney looking at an overseas marketplace sees a number in yuan. What
-      they will actually pay includes domestic shipping inside China, a forwarding agent's
-      service fee, international freight that is billed on the parcel's volume rather than
-      its weight, GST, and their card's foreign transaction margin. None of that is on the
-      listing page, and the gap between the two numbers is routinely two to three times.
+      A shopper in Sydney comparing an overseas listing to the shops at home is trying to
+      answer one question — is this worth ordering — and the listing price does not answer
+      it. Two things are in the way.
     </p>
     <p>
-      Most people either overpay because they guessed low, or never order at all because
-      they could not tell. tryMeOn does that arithmetic before the decision, not after the
-      parcel arrives.
+      The first is that the price is not always the cost. Some marketplaces ship to
+      Australia themselves and quote a delivered figure with freight and GST already in
+      it. Others quote the domestic Chinese price, and what the buyer eventually pays adds
+      shipping inside China, a forwarding agent's fee, international freight billed on the
+      parcel's volume rather than its weight, GST at the border, and their card's foreign
+      transaction margin. The same number on two listing pages can mean very different
+      things, and nothing on either page says which.
+    </p>
+    <p>
+      The second is that even a correct delivered price says nothing on its own. A$50 is
+      only good news against what the same kind of garment costs here. tryMeOn settles
+      both questions before the decision, not after the parcel arrives.
     </p>
   </section>
 
@@ -132,13 +139,29 @@
     <p class="label">How the price is worked out</p>
     <h2>Every line shown, nothing folded in.</h2>
     <p>
-      A real quote from the app for a linen blazer listed at ¥128 — A$26.49 converted, and
-      A$48.64 delivered. The freight line is the one that surprises people: the parcel is
-      light but bulky, so it is billed on 1.5 kg of volume rather than the 400 g it weighs.
+      Both ledgers below are printed by the same engine that runs in the app, from a test
+      that fails if the figures on this page ever drift from it.
     </p>
 
+    <p class="sub" style="margin-bottom:0">
+      A marketplace that ships to Australia itself, quoting a delivered A$48.64 linen
+      blazer. Its price already carries the freight and the GST it collects, so the only
+      thing left to add is what the card takes — and the app adds nothing else.
+    </p>
     <table class="ledger">
-      <tr><td>Item</td><td>A$26.49</td></tr>
+      <tr><td>Item ×1</td><td>A$48.64</td></tr>
+      <tr><td>Card FX &amp; fees (3%)</td><td>A$1.46</td></tr>
+      <tr><td>Landed at your door</td><td>A$50.10</td></tr>
+    </table>
+
+    <p class="sub" style="margin-bottom:0">
+      The same garment sourced domestically in China at ¥128 and forwarded — A$26.49
+      converted, A$48.64 at the door. The freight line is the one that surprises people:
+      the parcel is light but bulky, so it is billed on 1.5 kg of volume rather than the
+      400 g it weighs.
+    </p>
+    <table class="ledger">
+      <tr><td>Item ×1</td><td>A$26.49</td></tr>
       <tr><td>Freight <span class="sub">— billed on 1.5 kg of volume, not the 400 g it weighs</span></td><td>A$16.56</td></tr>
       <tr><td>GST (10%)</td><td>A$4.30</td></tr>
       <tr><td>Card FX &amp; fees (3%)</td><td>A$1.29</td></tr>
@@ -146,9 +169,17 @@
     </table>
 
     <p>
-      The app quotes every shipping route it knows — the marketplace's own consolidated
-      shipping and third-party forwarders, by air and by sea — and names the cheapest,
-      because the spread between them is often larger than the item.
+      Where a route is actually a choice, the app quotes every one it knows — the
+      marketplace's own consolidated shipping and third-party forwarders, by air and by
+      sea — and names the cheapest, because the spread between them is often larger than
+      the item. Where the seller delivers and there is only one route, it says so and
+      shows two lines rather than padding the table out to five.
+    </p>
+    <p>
+      Against either total, the app then shows what comparable garments sell for in
+      Australia and states the difference as a percentage. It is a comparison against
+      similar items and is labelled as one; matching an identical product across two
+      markets is not something anyone can do honestly, so the app does not claim to.
     </p>
 
     <div class="grid">

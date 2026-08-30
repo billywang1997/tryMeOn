@@ -31,7 +31,20 @@ enum class ShippingRoute {
     OFFICIAL_DIRECT,
 
     /** Buy to a forwarder's China warehouse, then reship. Works for any listing. */
-    FORWARDER
+    FORWARDER,
+
+    /**
+     * The platform delivers and quotes its own price.
+     *
+     * AliExpress sells at a price already converted to the buyer's currency, and
+     * as a registered platform it collects Australian GST at checkout on
+     * consignments at or under the threshold. There is no forwarder, no
+     * volumetric surprise and no route to choose, so almost everything this
+     * engine exists to compute has already been done by the seller. What is left
+     * is the margin the buyer's card adds on top of the mid-market rate — which
+     * is worth showing precisely because it is the only part still hidden.
+     */
+    PLATFORM_QUOTED
 }
 
 /** How an air/sea line prices a parcel. Rates are in CNY. */
@@ -214,6 +227,12 @@ object LandedCostCalculator {
         val fx = input.cnyToAud
         fun aud(cny: Double) = cny * fx
 
+        // A platform-quoted price is already delivered and already taxed; adding
+        // our own freight and GST on top would invent a cost the buyer never pays.
+        if (input.line.route == ShippingRoute.PLATFORM_QUOTED) {
+            return platformQuoted(input)
+        }
+
         val goodsCny = input.itemPriceCny * input.quantity
         val subtotalCny = goodsCny + input.domesticShippingCny
 
@@ -299,6 +318,36 @@ object LandedCostCalculator {
         val subtotal = input.itemPriceCny * input.quantity + input.domesticShippingCny
         val gap = threshold - subtotal
         return if (gap > 0) gap else null
+    }
+
+    /**
+     * The short version, for a source that quotes a delivered price.
+     *
+     * Two lines, honestly, rather than six invented ones. The freight and tax
+     * rows are absent because the platform has already charged them, not because
+     * they are zero — the UI says so rather than leaving a reader to assume.
+     */
+    private fun platformQuoted(input: LandedCostInput): LandedCost {
+        val goods = input.itemPriceCny * input.quantity * input.cnyToAud
+        val lines = mutableListOf(CostLine("Item ×${input.quantity}", goods))
+
+        if (input.cardSettlementPercent > 0) {
+            lines += CostLine(
+                "Card FX & fees (${fmt(input.cardSettlementPercent)}%)",
+                goods * input.cardSettlementPercent / 100.0
+            )
+        }
+
+        return LandedCost(
+            lines = lines,
+            totalAud = lines.sumOf { it.amountAud },
+            // No weight is billed to us, so reporting a chargeable weight would
+            // be describing a calculation that did not happen.
+            chargeableGrams = 0,
+            volumetricGrams = 0,
+            actualGrams = input.parcel.actualGrams,
+            estimatedDays = input.line.estimatedDays
+        )
     }
 
     /**

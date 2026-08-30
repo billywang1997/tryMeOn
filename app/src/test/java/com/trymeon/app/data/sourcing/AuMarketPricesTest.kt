@@ -4,6 +4,7 @@ import com.trymeon.app.data.remote.EbayItem
 import com.trymeon.app.data.remote.SerpApiService
 import com.trymeon.app.domain.sourcing.MarketBenchmark
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -22,27 +23,63 @@ class AuMarketPricesTest {
     @Test
     fun `a foreign-currency listing on the local results page is left out`() {
         val results = listOf(
-            listing("Linen blazer navy", "189.00", "AUD"),
-            listing("Linen blazer cream", "199.00", "AUD"),
-            // Same page, US seller: 95 of a different kind of dollar.
-            listing("Linen blazer stone", "95.00", "USD")
+            listing("Gordon Smith Danielle Cropped Linen Blazer", "189.00", "AUD"),
+            listing("Cropped Structured Linen Blazer", "199.00", "AUD"),
+            listing("IDEALSANXUN Womens Cropped Linen Blazer", "95.00", "USD")
         )
-        assertEquals(listOf(189.0, 199.0), prices.comparablePrices(results, "linen blazer"))
+        assertEquals(listOf(189.0, 199.0), prices.comparablePrices(results, "cropped linen blazer"))
+    }
+
+    @Test
+    fun `a retail title that never repeats the colour still counts`() {
+        // Every one of these is a chunky sneaker and every one was thrown away,
+        // because requiring all three query words of "black chunky sneakers"
+        // asks a brand-led retail title to describe itself. Real titles from
+        // Google Shopping AU.
+        val results = listOf(
+            listing("Women EVERAU Chunky Sneakers Como", "65.00", "AUD"),
+            listing("Windsor Smith Women's Chunky Leather Sneakers", "189.95", "AUD"),
+            listing("Men H&M Beige Chunky Sneakers", "69.99", "AUD"),
+            listing("LUCKY STEP Women Chunky Platform Dad Black Sneakers", "59.99", "AUD")
+        )
+        val kept = prices.comparablePrices(results, "black chunky sneakers")
+        assertEquals("a benchmark needs these four", 4, kept.size)
+        assertNotNull(MarketBenchmark.from(kept))
+    }
+
+    @Test
+    fun `a plain court shoe is not the price of a chunky one`() {
+        // The looser rule of "head noun only" would price chunky sneakers off
+        // these, which are a different product at a different price.
+        val results = listOf(
+            listing("Lacoste Men's Carnaby Set Sneaker", "98.99", "AUD"),
+            listing("Reebok Club C 85 Sneakers", "111.99", "AUD")
+        )
+        assertEquals(emptyList<Double>(), prices.comparablePrices(results, "black chunky sneakers"))
+    }
+
+    @Test
+    fun `a singular title matches a plural query`() {
+        val results = listOf(
+            listing("Marcs Men's Varsity Leather Sneaker", "127.46", "AUD"),
+            listing("Aquila Men's Deco 2.0 Leather Sneakers", "259.00", "AUD")
+        )
+        assertEquals(2, prices.comparablePrices(results, "black leather sneakers").size)
     }
 
     @Test
     fun `an unrelated product never sets the price of a blazer`() {
         val results = listOf(
-            listing("Linen blazer navy", "189.00", "AUD"),
+            listing("Gordon Smith Danielle Cropped Linen Blazer", "189.00", "AUD"),
             listing("Phone case clear", "12.00", "AUD")
         )
-        assertEquals(listOf(189.0), prices.comparablePrices(results, "linen blazer"))
+        assertEquals(listOf(189.0), prices.comparablePrices(results, "cropped linen blazer"))
     }
 
     @Test
     fun `a listing with no stated currency is trusted, since the search was local`() {
-        val results = listOf(listing("Linen blazer navy", "189.00", ""))
-        assertEquals(listOf(189.0), prices.comparablePrices(results, "linen blazer"))
+        val results = listOf(listing("Cropped Linen Blazer", "189.00", ""))
+        assertEquals(listOf(189.0), prices.comparablePrices(results, "cropped linen blazer"))
     }
 
     @Test

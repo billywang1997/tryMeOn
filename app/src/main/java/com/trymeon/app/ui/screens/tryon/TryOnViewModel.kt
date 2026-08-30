@@ -800,25 +800,8 @@ class TryOnViewModel(
         return com.trymeon.app.util.ensureGenderInQuery(query, gender)
     }
 
-    private fun parseEbayCategories(text: String): List<EbayTryOnCategory> {
-        val fashnMap = mapOf(
-            "top" to "tops", "jacket" to "tops", "bottoms" to "bottoms",
-            "set" to "one-pieces", "shoes" to "bottoms", "bag" to "tops"
-        )
-        return text.lines().filter { it.startsWith("CAT:") }.mapNotNull { line ->
-            val parts = line.removePrefix("CAT:").split("|")
-            if (parts.size < 3) return@mapNotNull null
-            val name = parts[0].trim()
-            EbayTryOnCategory(
-                name = name, reason = parts[1].trim(),
-                fashnCategory = fashnMap[name] ?: "tops",
-                searchQuery = ensureGenderInQuery(parts[2].trim()),
-                // The plan already wrote this, so the strip does not pay for a
-                // second round trip to translate what the model just said.
-                chineseQuery = parts.getOrNull(3)?.trim().orEmpty()
-            )
-        }
-    }
+    private fun parseEbayCategories(text: String): List<EbayTryOnCategory> =
+        TryOnPlanParser.parse(text) { ensureGenderInQuery(it) }
 
     fun inferEbayCategory(title: String): String {
         val t = title.lowercase()

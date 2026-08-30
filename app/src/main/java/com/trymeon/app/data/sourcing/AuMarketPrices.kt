@@ -53,18 +53,55 @@ class AuMarketPrices(
     /**
      * The prices from [results] that belong in a median for [englishQuery].
      *
-     * Two filters, both load-bearing. Without the title filter a search for a
-     * blazer prices itself against phone cases. Without the currency filter a
-     * US seller on the Australian results page contributes a number of a
-     * different kind, pulling the median down and the claimed saving with it.
+     * The rule is not "every query word appears in the title". Measured against
+     * real Google Shopping AU results, that produced a benchmark for one query
+     * in five: retail titles lead with a brand and a model name and rarely
+     * repeat the colour, so "black chunky sneakers" threw away all twenty
+     * results — every one of them a chunky sneaker.
+     *
+     * What identifies the kind of thing is the head noun, and what narrows it
+     * to something comparable is the modifiers. So: the last word of the query
+     * must appear, and at least half of the rest. On the same results that
+     * finds a benchmark for all five while still keeping a plain court shoe out
+     * of the price of a chunky one.
+     *
+     * The currency filter is separate and load-bearing: an Australian search
+     * still returns US sellers, whose prices are a number of a different kind
+     * and would move the median the card publishes.
      */
     internal fun comparablePrices(results: List<EbayItem>, englishQuery: String): List<Double> {
-        val wanted = PriceMatcher.tokens(englishQuery)
+        val words = queryWords(englishQuery)
+        val head = words.lastOrNull()
+        val modifiers = words.dropLast(1)
+
         return results
-            .filter { wanted.isEmpty() || PriceMatcher.tokens(it.title).containsAll(wanted) }
+            .filter { head == null || matches(head, modifiers, PriceMatcher.tokens(it.title)) }
             .filter { it.currency.isBlank() || it.currency == "AUD" }
             .mapNotNull { parsePrice(it.price) }
     }
+
+    /** Query words in the order written, which is where the head noun is. */
+    private fun queryWords(query: String): List<String> {
+        val noise = PriceMatcher.tokens(query)
+        return query.lowercase()
+            .replace(Regex("[^a-z0-9\\u4e00-\\u9fff]+"), " ")
+            .trim().split(" ")
+            .filter { it in noise }
+    }
+
+    private fun matches(head: String, modifiers: List<String>, title: Set<String>): Boolean {
+        val stems = title.map(::stem).toSet()
+        if (stem(head) !in stems) return false
+        if (modifiers.isEmpty()) return true
+        val hit = modifiers.count { stem(it) in stems }
+        return hit * 2 >= modifiers.size
+    }
+
+    /**
+     * Enough of a stem to survive a plural. Retail writes "Sneaker" as often as
+     * "Sneakers" and nothing here needs to be cleverer than that.
+     */
+    private fun stem(word: String) = if (word.length > 3 && word.endsWith("s")) word.dropLast(1) else word
 
     private fun parsePrice(raw: String): Double? =
         Regex("""\d[\d,]*(\.\d+)?""").find(raw)?.value?.replace(",", "")?.toDoubleOrNull()

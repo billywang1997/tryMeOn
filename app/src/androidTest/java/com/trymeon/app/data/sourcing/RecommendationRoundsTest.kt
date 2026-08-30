@@ -12,6 +12,7 @@ import com.trymeon.app.domain.model.ClothingItem
 import com.trymeon.app.domain.model.UserProfile
 import com.trymeon.app.domain.sourcing.BodyHints
 import com.trymeon.app.domain.sourcing.PriceExpectation
+import com.trymeon.app.ui.screens.tryon.TryOnPlanParser
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
 import com.trymeon.app.data.remote.SearchQuotaExceeded
@@ -75,11 +76,6 @@ class RecommendationRoundsTest {
             "tall"   to UserProfile(gender = "Male", height = 186, weight = 82)
         )
         var rounds = 0
-        // The catalog catches each source's failure and falls through to the
-        // next, so an exhausted upstream arrives here as an empty list, not an
-        // exception. Every round empty means there was no source to test
-        // against at all — an environment fact, not a verdict on the code.
-        var anySource = false
         val allQueries = mutableMapOf<PriceExpectation, MutableList<String>>()
         println("=== COMPLETE THE LOOK · anchor: ${anchor.color} ${anchor.name} ===")
         for (p in PriceExpectation.entries) for ((label, body) in bodies) {
@@ -97,10 +93,6 @@ class RecommendationRoundsTest {
             allQueries.getOrPut(p) { mutableListOf() } += lines.map { it.split("|")[2].lowercase() }
             rounds++
         }
-        assumeTrue(
-            "no source returned anything in $rounds rounds — nothing to judge",
-            anySource
-        )
         println("rounds: $rounds")
 
         // Budget should show in the words: premium materials belong at the top end.
@@ -126,17 +118,28 @@ class RecommendationRoundsTest {
                 openAiKey, wardrobe, emptyList(), gender, setOf("streetwear"),
                 priceHint = p.stylistHint, bodyHint = BodyHints.describe(profile)
             )
-            val lines = raw.lines().filter { it.startsWith("CAT:") }
+            // Read through the parser the app uses, not by matching the prompt's
+            // wording. The model drops the "CAT:" prefix often enough that
+            // asserting on it tested the model's obedience rather than whether
+            // a user gets a recommendation.
+            val plan = TryOnPlanParser.parse(raw) { it }
             println("--- $gender · ${p.name} ---")
-            lines.forEach { println("  $it") }
-            assertTrue("no CAT lines:\n$raw", lines.size >= 3)
+            plan.forEach { println("  ${it.name} | ${it.searchQuery} | ${it.chineseQuery}") }
+            assertTrue("nothing usable in:\n$raw", plan.size >= 3)
+
+            val legal = setOf("tops", "bottoms", "one-pieces")
+            assertTrue(
+                "a category the try-on service rejects: ${plan.map { it.name to it.fashnCategory }}",
+                plan.all { it.fashnCategory in legal }
+            )
+
             val gw = if (gender == "Female") "women" else "men"
             val wrong = if (gender == "Female") Regex("\\bmen's\\b") else Regex("\\bwomen's\\b")
-            val english = lines.map { it.split("|").getOrElse(2) { "" }.lowercase() }
+            val english = plan.map { it.searchQuery.lowercase() }
             assertTrue("gender leaked the wrong way: $english", english.none { wrong.containsMatchIn(it) })
             assertTrue("queries should carry $gw", english.count { it.contains(gw) } >= english.size / 2)
             // Chinese phrase present so the shop side does not pay for a translation.
-            val chinese = lines.map { it.split("|").getOrElse(3) { "" } }
+            val chinese = plan.map { it.chineseQuery }
             assertTrue("missing Chinese phrases: $chinese", chinese.all { c -> c.any { it.code in 0x4E00..0x9FFF } })
         }
     }

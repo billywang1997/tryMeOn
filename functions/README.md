@@ -69,7 +69,9 @@ npm --prefix functions install
 # One-off: load each key into Secret Manager.
 for s in OPENAI_API_KEY FASHN_API_KEY SERP_API_KEY SCRAPER_API_KEY RAPID_API_KEY \
          GOOGLE_SEARCH_KEY GOOGLE_SEARCH_CX UNSPLASH_ACCESS_KEY \
-         EBAY_CLIENT_ID EBAY_CLIENT_SECRET; do
+         EBAY_CLIENT_ID EBAY_CLIENT_SECRET \
+         ALIEXPRESS_APP_KEY ALIEXPRESS_APP_SECRET ALIEXPRESS_TRACKING_ID \
+         ALIEXPRESS_SIGN_METHOD; do
   firebase functions:secrets:set "$s"
 done
 
@@ -100,6 +102,14 @@ otherwise an open proxy for anyone able to create an anonymous account.
 Then add the target to `test/targets.test.js` — at minimum, that its
 allowlist refuses a path the app does not use. `taobaounion` is the worked
 example of a target that signs rather than just attaching a header.
+
+## Which signature AliExpress wants
+
+The gateway validates the app key before the signature, so the correct form
+cannot be established without a real key. Both are implemented and tested:
+set `ALIEXPRESS_SIGN_METHOD` to `sha256` (current gateway) and, if calls come
+back rejected on signature rather than on key, switch it to `md5`. No code
+change either way.
 
 ## Rotate the old keys
 

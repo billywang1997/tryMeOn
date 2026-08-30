@@ -6,7 +6,7 @@
  * the function. This is what stops the relay from becoming an open proxy that
  * anyone with a Firebase account can point at arbitrary hosts.
  */
-import { createHash } from "crypto";
+import { createHash, createHmac } from "crypto";
 import { defineSecret } from "firebase-functions/params";
 
 export const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
@@ -27,6 +27,15 @@ export const TAOBAO_APP_KEY = defineSecret("TAOBAO_APP_KEY");
 export const TAOBAO_APP_SECRET = defineSecret("TAOBAO_APP_SECRET");
 export const TAOBAO_ADZONE_ID = defineSecret("TAOBAO_ADZONE_ID");
 
+// AliExpress affiliate. TRACKING_ID is the affiliate slot commission is paid
+// against — and the API returns an empty result rather than an error when it is
+// missing, so it is injected here and never left to the caller.
+export const ALIEXPRESS_APP_KEY = defineSecret("ALIEXPRESS_APP_KEY");
+export const ALIEXPRESS_APP_SECRET = defineSecret("ALIEXPRESS_APP_SECRET");
+export const ALIEXPRESS_TRACKING_ID = defineSecret("ALIEXPRESS_TRACKING_ID");
+/** "sha256" (current gateway) or "md5" (older). Set once the real key confirms it. */
+export const ALIEXPRESS_SIGN_METHOD = defineSecret("ALIEXPRESS_SIGN_METHOD");
+
 export const ALL_SECRETS = [
   OPENAI_API_KEY,
   FASHN_API_KEY,
@@ -41,6 +50,10 @@ export const ALL_SECRETS = [
   TAOBAO_APP_KEY,
   TAOBAO_APP_SECRET,
   TAOBAO_ADZONE_ID,
+  ALIEXPRESS_APP_KEY,
+  ALIEXPRESS_APP_SECRET,
+  ALIEXPRESS_TRACKING_ID,
+  ALIEXPRESS_SIGN_METHOD,
 ];
 
 /** Quota units charged per call. Roughly proportional to what the call costs us. */
@@ -155,6 +168,38 @@ export const TARGETS: Record<string, Target> = {
     weigh: flat(2),
   },
 
+  /**
+   * AliExpress affiliate. Same family of protocol as Taobao but a different
+   * gateway, and the signature may be HMAC-SHA256 or the older MD5 wrap
+   * depending on the app — the live endpoint validates the app key before the
+   * signature, so which one applies cannot be determined without a real key.
+   * Both are implemented; ALIEXPRESS_SIGN_METHOD selects.
+   */
+  aliexpress: {
+    origin: "https://api-sg.aliexpress.com",
+    allow: [/^\/sync$/],
+    authorize: (_h, u) => {
+      const p = u.searchParams;
+      const method = (ALIEXPRESS_SIGN_METHOD.value() || "sha256").toLowerCase();
+      p.set("app_key", ALIEXPRESS_APP_KEY.value());
+      p.set("format", "json");
+      p.set("v", "2.0");
+      p.set("sign_method", method);
+      p.set("timestamp", method === "md5" ? beijingTimestamp() : String(Date.now()));
+      // Ours, not the caller's: this is where commission lands, and omitting it
+      // returns an empty product list with no error at all.
+      p.set("tracking_id", ALIEXPRESS_TRACKING_ID.value());
+      p.delete("sign");
+      p.set(
+        "sign",
+        method === "md5"
+          ? topSign(p, ALIEXPRESS_APP_SECRET.value())
+          : hmacSign(p, ALIEXPRESS_APP_SECRET.value())
+      );
+    },
+    weigh: flat(2),
+  },
+
   ebay: {
     origin: "https://api.ebay.com",
     // The client never sees an eBay token: the OAuth exchange happens here and
@@ -185,6 +230,16 @@ export function topSign(params: URLSearchParams, secret: string): string {
     .update(secret + joined + secret, "utf8")
     .digest("hex")
     .toUpperCase();
+}
+
+/**
+ * HMAC-SHA256 over the sorted key/value concatenation. Unlike the MD5 form the
+ * secret is the HMAC key rather than padding wrapped around the payload.
+ */
+export function hmacSign(params: URLSearchParams, secret: string): string {
+  const keys = [...params.keys()].sort();
+  const joined = keys.map((k) => k + params.get(k)).join("");
+  return createHmac("sha256", secret).update(joined, "utf8").digest("hex").toUpperCase();
 }
 
 // --- eBay application token, minted here and cached for the instance lifetime ---

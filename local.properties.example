@@ -59,6 +59,12 @@ SKIMLINKS_ID=
 #   DAIGOU_PROVIDERS=agent1|Agent One|https://agent.example/order?url={url}&ref={code}|MYCODE
 DAIGOU_PROVIDERS=
 
+# AliExpress affiliate — apply at portals.aliexpress.com (no Chinese entity
+# required). The key, secret and tracking id live in Secret Manager, not here;
+# the app only needs the relay. Listed for reference.
+#   ALIEXPRESS_APP_KEY / ALIEXPRESS_APP_SECRET / ALIEXPRESS_TRACKING_ID
+#   ALIEXPRESS_SIGN_METHOD = sha256 | md5
+
 # Sovrn Commerce (ex-VigLink) site ID — competitor to Skimlinks for A/B comparison.
 # Register at https://www.sovrn.com/commerce
 SOVRN_SITE_ID=

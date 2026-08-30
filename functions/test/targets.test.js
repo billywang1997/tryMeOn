@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const { createHash } = require("node:crypto");
-const { topSign, beijingTimestamp, TARGETS } = require("../lib/targets");
+const { topSign, hmacSign, beijingTimestamp, TARGETS } = require("../lib/targets");
 
 // ── Taobao Open Platform signing ────────────────────────────────────────────
 //
@@ -131,4 +131,50 @@ test("hop-by-hop and Expect headers are stripped", () => {
   assert.ok(STRIP_HEADERS.has("x-relay-target"));
   // Content-type must survive: it carries the multipart boundary.
   assert.ok(!STRIP_HEADERS.has("content-type"));
+});
+
+// ── AliExpress signing ──────────────────────────────────────────────────────
+//
+// The gateway validates the app key before the signature, so which of the two
+// forms applies cannot be established without a real key. Both are pinned here
+// against independently computed digests so whichever the account turns out to
+// need is already correct.
+
+const { createHmac } = require("node:crypto");
+
+test("HMAC signing uses the secret as the key, not as padding", () => {
+  const p = new URLSearchParams({
+    method: "aliexpress.affiliate.product.query",
+    app_key: "12345678",
+    keywords: "linen blazer",
+    tracking_id: "slot1",
+  });
+  const expected = createHmac("sha256", "SECRET")
+    .update("app_key12345678keywordslinen blazermethodaliexpress.affiliate.product.querytracking_idslot1", "utf8")
+    .digest("hex")
+    .toUpperCase();
+
+  assert.strictEqual(hmacSign(p, "SECRET"), expected);
+});
+
+test("the two signing forms never agree", () => {
+  // Sending the wrong one is rejected with an opaque message, so a test that
+  // could not tell them apart would be worthless.
+  const p = new URLSearchParams({ a: "1", b: "2" });
+  assert.notStrictEqual(hmacSign(p, "S"), topSign(p, "S"));
+});
+
+test("HMAC output is uppercase hex of the right length", () => {
+  assert.match(hmacSign(new URLSearchParams({ a: "1" }), "S"), /^[0-9A-F]{64}$/);
+});
+
+test("aliexpress is pinned to the single sync endpoint", () => {
+  const allow = (p) => TARGETS.aliexpress.allow.some((re) => re.test(p));
+  assert.ok(allow("/sync"));
+  assert.ok(!allow("/sync/anything"));
+  assert.ok(!allow("/"));
+});
+
+test("aliexpress forwards only to the affiliate gateway", () => {
+  assert.strictEqual(TARGETS.aliexpress.origin, "https://api-sg.aliexpress.com");
 });

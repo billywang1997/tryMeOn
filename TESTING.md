@@ -65,8 +65,8 @@ impossible. To keep it installed and run one class:
 
 ```sh
 ./gradlew :app:installDebug :app:installDebugAndroidTest
-adb shell am instrument -w -e class com.example.myapplication.data.sourcing.SourcingLiveTest \
-  com.example.myapplication.test/androidx.test.runner.AndroidJUnitRunner
+adb shell am instrument -w -e class com.trymeon.app.data.sourcing.SourcingLiveTest \
+  com.trymeon.app.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
 `println` output goes to logcat, not to the Gradle console:
@@ -80,7 +80,7 @@ storage cannot be read by `adb shell` on current Android, so pull with
 `run-as`:
 
 ```sh
-adb exec-out run-as com.example.myapplication cat files/cards/live_look.png > look.png
+adb exec-out run-as com.trymeon.app cat files/cards/live_look.png > look.png
 ```
 
 ### The ones that spend money

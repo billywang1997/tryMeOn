@@ -13,7 +13,7 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { GoogleAuth } from "google-auth-library";
 
 /** Must match applicationId in app/build.gradle.kts. */
-const PACKAGE_NAME = "com.example.myapplication";
+const PACKAGE_NAME = "com.trymeon.app";
 
 /** Product ids that grant the paid relay tier. */
 const PAID_PRODUCTS = new Set(["audit_unlock"]);

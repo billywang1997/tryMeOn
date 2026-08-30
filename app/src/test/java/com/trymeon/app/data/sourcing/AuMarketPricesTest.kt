@@ -168,4 +168,32 @@ class AuMarketPricesTest {
         )
         assertEquals(listOf(199.0), prices.comparablePrices(results, "beige linen cropped blazer"))
     }
+
+    @Test
+    fun `two markets in one sample make no single usual price`() {
+        // Real prices from a live "black leather jacket" search: fast-fashion PU
+        // at the bottom, designer leather at the top, nothing in the middle that
+        // "about A$310" describes.
+        val jackets = listOf(
+            40.0, 82.0, 84.0, 90.0, 130.0, 142.0, 150.0, 170.0, 300.0,
+            320.0, 349.0, 399.0, 400.0, 600.0, 980.0, 999.0, 999.0, 1560.0
+        )
+        val b = MarketBenchmark.from(jackets)!!
+        assertEquals("a percentage off this would be a claim the prices do not support",
+            null, b.savingPercentAgainst(60.0))
+        // The range is still worth telling someone.
+        assert(b.lowAud < b.highAud)
+    }
+
+    @Test
+    fun `a coherent sample still gets its percentage`() {
+        // The same shape of search for jeans, where the middle half is tight.
+        val jeans = listOf(
+            20.0, 26.0, 30.0, 30.0, 32.0, 38.0, 40.0, 42.0, 49.0, 50.0,
+            52.0, 52.0, 52.0, 53.0, 59.0, 60.0, 60.0, 63.0, 65.0, 70.0
+        )
+        val b = MarketBenchmark.from(jeans)!!
+        assertEquals(true, b.isCoherent)
+        assertEquals(61, b.savingPercentAgainst(20.0))
+    }
 }

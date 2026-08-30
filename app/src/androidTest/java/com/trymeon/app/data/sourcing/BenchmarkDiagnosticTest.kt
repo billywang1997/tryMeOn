@@ -30,14 +30,14 @@ class BenchmarkDiagnosticTest {
         val out = StringBuilder()
 
         val queries = listOf(
-            // Three-modifier phrases are what the photo lookup produces, and
-            // they are the ones that fall below a usable sample. Each is paired
-            // with the same phrase minus its colour, to test whether colour is
-            // the modifier retail titles omit.
-            "navy ribbed turtleneck sweater", "ribbed turtleneck sweater",
-            "beige linen cropped blazer", "linen cropped blazer",
-            "grey long-sleeve thermal shirt", "long-sleeve thermal shirt",
-            "black chunky leather sneakers", "chunky leather sneakers"
+            // Colour is excluded from the comparison, so a phrase whose only
+            // modifier is a colour degrades to the head noun alone. Whether
+            // that is acceptable is a question about the median, not the count:
+            // each pair is the colour phrase against the bare noun it becomes.
+            "white sneakers", "sneakers",
+            "black dress", "dress",
+            "blue jeans", "jeans",
+            "black leather jacket", "leather jacket"
         )
         for (q in queries) {
             val results = serp.search(serpKey, q, limit = 20).getOrNull().orEmpty()

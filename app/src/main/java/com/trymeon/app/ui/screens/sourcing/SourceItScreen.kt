@@ -808,7 +808,23 @@ private fun compact(n: Int) = when {
  */
 @Composable
 private fun LocalComparison(item: SourcedItem, benchmark: MarketBenchmark?) {
-    val saving = benchmark?.savingPercentAgainst(item.bestTotalAud) ?: return
+    if (benchmark == null) return
+    val saving = benchmark.savingPercentAgainst(item.bestTotalAud)
+
+    // A sample that spans two markets — fast fashion beside designer — has no
+    // "usual price" to be a percentage below. The range still tells the shopper
+    // something true, and it is the honest half of what we know.
+    if (saving == null) {
+        if (!benchmark.isCoherent && item.bestTotalAud < benchmark.lowAud) {
+            Text(
+                "Similar here run A$${"%.0f".format(benchmark.lowAud)}–" +
+                    "${"%.0f".format(benchmark.highAud)} · ${benchmark.sampleSize} listings",
+                style = MaterialTheme.typography.labelMedium,
+                color = Ash
+            )
+        }
+        return
+    }
 
     Row(
         modifier = Modifier

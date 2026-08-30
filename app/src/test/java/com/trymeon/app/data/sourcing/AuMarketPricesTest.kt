@@ -139,4 +139,33 @@ class AuMarketPricesTest {
         val results = listOf(listing("Levi's 501 Straight Jeans Blue", "129.00", "AUD"))
         assertEquals(emptyList<Double>(), prices.comparablePrices(results, "grey wool sweater"))
     }
+
+    @Test
+    fun `a colour narrows the sample to the shops that mention colours`() {
+        // The real shape of it: the listings that name "beige" in the title are
+        // the dear ones, so keeping the colour both shrank the sample and moved
+        // the median from A$170 to A$456 — a number the card would then claim a
+        // saving against.
+        val results = listOf(
+            listing("Assembly Label Linen Blazer", "320.00", "AUD"),
+            listing("Country Road Cropped Linen Blazer", "199.00", "AUD"),
+            listing("Glassons Linen Blend Cropped Blazer", "70.00", "AUD"),
+            listing("Camilla and Marc Beige Linen Blazer", "620.00", "AUD"),
+            listing("Scanlan Theodore Beige Cropped Linen Jacket Blazer", "1310.00", "AUD")
+        )
+        val kept = prices.comparablePrices(results, "beige linen cropped blazer")
+        assertEquals("colour must not decide who is comparable", 5, kept.size)
+        assertEquals(320.0, MarketBenchmark.from(kept)!!.typicalAud, 0.01)
+    }
+
+    @Test
+    fun `dropping the colour does not drop what the garment is`() {
+        // Only the colour is ignored. Material and cut still have to match, or
+        // a linen blazer would be priced off a puffer jacket.
+        val results = listOf(
+            listing("Uniqlo Ultra Light Down Puffer Jacket", "129.00", "AUD"),
+            listing("Country Road Cropped Linen Blazer", "199.00", "AUD")
+        )
+        assertEquals(listOf(199.0), prices.comparablePrices(results, "beige linen cropped blazer"))
+    }
 }

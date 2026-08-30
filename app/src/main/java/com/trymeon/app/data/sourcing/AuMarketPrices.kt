@@ -72,7 +72,7 @@ class AuMarketPrices(
     internal fun comparablePrices(results: List<EbayItem>, englishQuery: String): List<Double> {
         val words = queryWords(englishQuery)
         val head = words.lastOrNull()
-        val modifiers = words.dropLast(1)
+        val modifiers = words.dropLast(1).filterNot { it in COLOURS }
 
         return results
             .filter { head == null || matches(head, modifiers, PriceMatcher.tokens(it.title)) }
@@ -111,6 +111,29 @@ class AuMarketPrices(
      * ten and priced it at A$105. The photo lookup and the stylist both write
      * American English, and the shops here do not.
      */
+    /**
+     * Colours, which are excluded from the comparison.
+     *
+     * Measured on real results, and the effect runs both ways. "navy ribbed
+     * turtleneck sweater" kept three listings and produced no benchmark; the
+     * same phrase without "navy" kept eleven and priced it at A$40. Worse,
+     * "beige linen cropped blazer" kept eight — 67, 170, 180, 320, 592, 620,
+     * 1310, 1430 — for a median of A$456, because the shops that bother to put
+     * "beige" in a title are the expensive ones. Dropping the colour gave
+     * eighteen listings and A$170.
+     *
+     * A wrong benchmark is worse than a missing one: it is the number the card
+     * claims a saving against. Colour is also close to irrelevant to price,
+     * which is what makes this safe as well as necessary.
+     */
+    private val COLOURS = setOf(
+        "black", "white", "grey", "gray", "navy", "blue", "red", "green",
+        "beige", "cream", "tan", "brown", "khaki", "olive", "charcoal",
+        "pink", "purple", "yellow", "orange", "burgundy", "maroon", "teal",
+        "ivory", "stone", "sand", "camel", "silver", "gold", "multicolour",
+        "multicolor", "nude", "blush", "mint", "lilac", "coral"
+    )
+
     private val ALSO_CALLED = listOf(
         setOf("sweater", "jumper", "pullover", "knit"),
         setOf("sneaker", "trainer", "runner"),

@@ -30,22 +30,26 @@ class BenchmarkDiagnosticTest {
         val out = StringBuilder()
 
         val queries = listOf(
-            "black chunky sneakers", "grey straight jeans", "cropped linen blazer",
-            "men's black leather sneakers", "women's black bucket hat",
-            // The photo lookup says "sweater"; Australian retail says "jumper".
-            "navy ribbed turtleneck sweater", "navy ribbed turtleneck jumper",
-            "grey wool sweater", "grey wool jumper"
+            // Three-modifier phrases are what the photo lookup produces, and
+            // they are the ones that fall below a usable sample. Each is paired
+            // with the same phrase minus its colour, to test whether colour is
+            // the modifier retail titles omit.
+            "navy ribbed turtleneck sweater", "ribbed turtleneck sweater",
+            "beige linen cropped blazer", "linen cropped blazer",
+            "grey long-sleeve thermal shirt", "long-sleeve thermal shirt",
+            "black chunky leather sneakers", "chunky leather sneakers"
         )
         for (q in queries) {
             val results = serp.search(serpKey, q, limit = 20).getOrNull().orEmpty()
             val wanted = PriceMatcher.tokens(q)
 
-            val kept = market.comparablePrices(results, q)
+            val kept = market.comparablePrices(results, q).sorted()
             val b = com.trymeon.app.domain.sourcing.MarketBenchmark.from(kept)
             out.appendLine("%-30s returned %2d  kept %2d  %s".format(
                 "\"$q\"", results.size, kept.size,
                 if (b == null) "NO BENCHMARK" else "median A$%.0f from %d".format(b.typicalAud, b.sampleSize)
             ))
+            if (kept.isNotEmpty()) out.appendLine("      kept: " + kept.joinToString(" ") { "%.0f".format(it) })
             out.appendLine()
         }
         File(ctx.filesDir, "benchmark-diag.txt").writeText(out.toString())

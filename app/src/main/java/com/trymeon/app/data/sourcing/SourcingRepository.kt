@@ -2,6 +2,7 @@ package com.trymeon.app.data.sourcing
 
 import com.trymeon.app.data.remote.FxRate
 import com.trymeon.app.data.remote.ProductSearch
+import com.trymeon.app.data.remote.SearchUnavailable
 import com.trymeon.app.data.remote.TaobaoItem
 import com.trymeon.app.domain.model.ClothingCategory
 import com.trymeon.app.domain.sourcing.DaigouAgent
@@ -167,8 +168,17 @@ class SourcingRepository(
         var used = ""
         var listings: List<TaobaoItem> = emptyList()
         var blocked: Throwable? = null
+        val usable = sources.filter { it.available }
+        // Nothing to search with is a different answer from nothing found, and
+        // telling a shopper their words did not match when we never looked
+        // sends them off rewording a query that was never the problem.
+        if (usable.isEmpty()) {
+            return Result.failure(
+                SearchUnavailable("Product search is not set up on this build yet")
+            )
+        }
         outer@ for (phrase in query.chineseQueries) {
-            for (source in sources.filter { it.available }) {
+            for (source in usable) {
                 val attempt = source.search(phrase)
                 // Remember why we could not search, so an exhausted quota is not
                 // reported to the user as an unlucky search.
@@ -183,7 +193,7 @@ class SourcingRepository(
         }
         if (listings.isEmpty()) {
             return Result.failure(
-                blocked ?: NoSuchElementException("No Taobao listings matched that")
+                blocked ?: NoSuchElementException("Nothing matched that — try fewer words")
             )
         }
 

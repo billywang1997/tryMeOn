@@ -2,6 +2,7 @@ package com.trymeon.app.data.sourcing
 
 import com.trymeon.app.data.remote.ProductSearch
 import com.trymeon.app.data.remote.SearchQuotaExceeded
+import com.trymeon.app.data.remote.SearchUnavailable
 import com.trymeon.app.data.remote.TaobaoItem
 import com.trymeon.app.domain.model.ClothingCategory
 import kotlinx.coroutines.runBlocking
@@ -17,9 +18,11 @@ import org.junit.Test
  */
 class SearchFailureTest {
 
-    private class Source(private val outcome: Result<List<TaobaoItem>>) : ProductSearch {
+    private class Source(
+        private val outcome: Result<List<TaobaoItem>>,
+        override val available: Boolean = true
+    ) : ProductSearch {
         override val name = "fake"
-        override val available = true
         override suspend fun search(keyword: String, limit: Int) = outcome
     }
 
@@ -37,8 +40,8 @@ class SearchFailureTest {
         )
     }
 
-    private fun repo(outcome: Result<List<TaobaoItem>>) =
-        SourcingRepository(listOf(Source(outcome)), Builder())
+    private fun repo(outcome: Result<List<TaobaoItem>>, available: Boolean = true) =
+        SourcingRepository(listOf(Source(outcome, available)), Builder())
 
     @Test
     fun `an exhausted quota is reported as such`() = runBlocking {
@@ -55,7 +58,7 @@ class SearchFailureTest {
         val result = repo(Result.success(emptyList())).source("linen blazer")
         assertTrue(result.isFailure)
         assertEquals(
-            "No Taobao listings matched that",
+            "Nothing matched that — try fewer words",
             result.exceptionOrNull()?.message
         )
     }
@@ -72,5 +75,33 @@ class SearchFailureTest {
         val result = repo.source("linen blazer")
         assertTrue("a fallback source should still deliver", result.isSuccess)
         assertEquals(1, result.getOrThrow().listings.size)
+    }
+
+    @Test
+    fun `no configured source says so, rather than blaming the words`() {
+        // Different from finding nothing: we never looked. Reporting it as a
+        // miss sends someone off rewording a query that was never the problem.
+        runBlocking {
+            val e = repo(Result.success(emptyList()), available = false)
+                .source("linen blazer").exceptionOrNull()
+            assertTrue("expected an availability failure, got $e", e is SearchUnavailable)
+            assertTrue(e!!.message!!.contains("not set up"))
+        }
+    }
+
+    @Test
+    fun `no failure names a marketplace at the shopper`() = runBlocking {
+        // Several marketplaces feed this now, and which one answered is not
+        // something a shopper should have to know about.
+        listOf(
+            repo(Result.success(emptyList()), available = false),
+            repo(Result.success(emptyList()))
+        ).forEach {
+            val msg = it.source("linen blazer").exceptionOrNull()?.message.orEmpty()
+            assertTrue(
+                "leaked a marketplace name: $msg",
+                !msg.contains("Taobao") && !msg.contains("AliExpress")
+            )
+        }
     }
 }

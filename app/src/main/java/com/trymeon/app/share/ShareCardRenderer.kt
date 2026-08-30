@@ -74,10 +74,13 @@ object ShareCardRenderer {
             color = WARM
             isAntiAlias = true
             textSize = 32f
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            // Serif, like the app's own headers. This card is the only part of
+            // the product most people will ever see, so it should look like it
+            // came from somewhere.
+            typeface = Typeface.create(Typeface.SERIF, Typeface.NORMAL)
             letterSpacing = 0.3f
         }
-        canvas.drawText("WARDROBE  ·  AI", MARGIN, 130f, brand)
+        canvas.drawText("TRY ME ON", MARGIN, 130f, brand)
     }
 
     private fun drawFooter(canvas: Canvas) {
@@ -87,7 +90,11 @@ object ShareCardRenderer {
             textSize = 28f
             letterSpacing = 0.1f
         }
-        canvas.drawText("Build yours · download the app", MARGIN, H - 80f, p)
+        // A share card exists to be seen by someone who does not have the app,
+        // and "download the app" does not say which one. The name is enough to
+        // search for; it is not a domain, because the app does not own one and
+        // printing an address that goes nowhere is worse than printing none.
+        canvas.drawText("Build yours · tryMeOn", MARGIN, H - 80f, p)
     }
 
     // ── Look Board ──────────────────────────────────────────────────────────

@@ -52,6 +52,32 @@ second ordinary account can reach none of them.
 Add a case here whenever `FirestoreRepository` touches a new collection. A path
 with no rule is denied, so the failure shows up as sync silently not working.
 
+## Storage rules
+
+```sh
+cd functions && npm run test:storage
+```
+
+Runs against the Storage emulator. These paths hold photographs of people,
+including the face and body shots taken for try-on. A new bucket's default rule
+is `request.auth != null`, and this app signs people in anonymously — so that
+default would let anyone who installs the app read everyone else's photos by
+walking the uid paths.
+
+Two things the tests pinned down that reading the rules would not have:
+
+- `allow write` covers delete, and on a delete there is no `request.resource`.
+  A predicate that reads `request.resource.contentType` therefore fails the
+  whole rule and denies the owner their own file. Create/update and delete are
+  separate rules for that reason.
+- A content-type check was tried and dropped. A client that sends no metadata
+  gets `application/octet-stream`, so the rule would have had to accept that
+  anyway, and an owner could name a zip `.jpg` regardless. It risked the worst
+  failure available here — silently rejecting every photo upload — for nothing.
+
+`storage.rules` is version-controlled and wired into `firebase.json`; before
+this it existed only in the console and had never been verified.
+
 ## Device tests
 
 Needs a running emulator or device.

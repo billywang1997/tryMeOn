@@ -1,0 +1,63 @@
+rules_version = '2';
+
+// Photographs, including a user's face and body. The app signs people in
+// anonymously, so "is signed in" says nothing about who they are: a rule of
+// `request.auth != null` — the default a new bucket ships with — lets anyone
+// who opens the app read every other user's photos by walking the uid paths.
+//
+// Note on the marketplace: a listing's image stays visible to buyers because
+// the app stores the tokenised download URL returned by getDownloadUrl() and
+// loads it over plain HTTPS, which does not go through these rules. Read here
+// governs access by path through the SDK, and that belongs to the owner alone.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // Uploads are photos, and a phone camera file is large but not unbounded.
+    // Only ever applied to create and update: on a delete there is no
+    // request.resource, and reading contentType off it fails the whole rule,
+    // which denies the owner their own file.
+    // Size only, deliberately.
+    //
+    // A content-type check was tried and removed. It cannot be relied on: a
+    // client that sends no metadata gets application/octet-stream, so the rule
+    // would have to accept that anyway, and an owner who wanted to store a zip
+    // could name it .jpg regardless. It bought nothing while risking the worst
+    // failure available here — silently rejecting every photo upload. What
+    // actually protects this bucket is that each path belongs to one uid and
+    // nothing may be written outside it.
+    function isUnder(mb) {
+      return request.resource != null
+             && request.resource.size < mb * 1024 * 1024;
+    }
+
+    // Garment photos, face and body photos, and saved try-on renders. Each
+    // path the app actually writes, and nothing else.
+    match /users/{uid}/wardrobe/{file} {
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid) && isUnder(15);
+      allow delete: if isOwner(uid);
+    }
+
+    match /users/{uid}/profile/{file} {
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid) && isUnder(15);
+      allow delete: if isOwner(uid);
+    }
+
+    match /users/{uid}/saved/{file} {
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid) && isUnder(15);
+      allow delete: if isOwner(uid);
+    }
+
+    // Anything else, including a path a future feature adds without a rule.
+    // Denied is the safe way to find out.
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

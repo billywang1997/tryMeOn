@@ -13,7 +13,8 @@
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
     "test": "npm run build && node --test test/targets.test.js",
-    "test:rules": "firebase emulators:exec --only firestore --project rules-test 'node --test test/rules.test.js'"
+    "test:rules": "firebase emulators:exec --only firestore --project rules-test 'node --test test/rules.test.js'",
+    "test:storage": "firebase emulators:exec --only storage --project rules-test 'node --test test/storage.rules.test.js'"
   },
   "dependencies": {
     "firebase-admin": "^12.6.0",

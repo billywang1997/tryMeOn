@@ -2,7 +2,9 @@ package com.trymeon.app.data.remote
 
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
+import java.io.File
 import org.junit.Test
 
 /**
@@ -14,6 +16,39 @@ import org.junit.Test
 class RelayRoutingTest {
 
     private val base = "https://us-central1-mycloset-ce07e.cloudfunctions.net/relay".toHttpUrl()
+
+    /**
+     * Every target the relay registers has a route on this side.
+     *
+     * Read out of the relay's own source rather than listed here, because a
+     * hand-written list only covers what the person writing it remembered. Two
+     * targets — the AliExpress and Taobao affiliate gateways — were registered
+     * on the relay and had no client route, and the list below said "every
+     * upstream the app calls" while missing both.
+     *
+     * The failure is silent by design: an unmapped host is passed through
+     * untouched, so the request goes straight to the gateway with no key and no
+     * signature and comes back as an error envelope, long after the relay looks
+     * deployed and correct.
+     */
+    @Test
+    fun `every relay target has a route on the client`() {
+        val registry = File("../functions/src/targets.ts").readText()
+        val routing = File("src/main/java/com/trymeon/app/data/remote/RelayRouting.kt").readText()
+
+        val targets = Regex("""\n  (\w+): \{\n\s*origin:""")
+            .findAll(registry).map { it.groupValues[1] }.toList()
+        assertTrue("could not read the relay's target registry", targets.size >= 8)
+
+        targets.forEach { name ->
+            assertTrue(
+                "the relay registers '$name' and nothing on this side routes to it — " +
+                    "an unmapped host is passed through untouched, so the request reaches " +
+                    "the upstream with no key and no signature",
+                routing.contains("\"$name\"")
+            )
+        }
+    }
 
     @Test
     fun `maps every upstream the app calls`() {
@@ -33,6 +68,8 @@ class RelayRoutingTest {
             "https://asos2.p.rapidapi.com/products/v2/list" to "rapidapi",
             "https://theiconic.p.rapidapi.com/products/search" to "rapidapi",
             "https://www.googleapis.com/customsearch/v1?q=coat" to "googlesearch",
+            "https://api-sg.aliexpress.com/sync?method=aliexpress.affiliate.product.query" to "aliexpress",
+            "https://eco.taobao.com/router/rest?method=taobao.tbk.dg.material.optional" to "taobaounion",
         )
         cases.forEach { (url, expected) ->
             assertEquals(url, expected, RelayRouting.targetFor(url.toHttpUrl()))

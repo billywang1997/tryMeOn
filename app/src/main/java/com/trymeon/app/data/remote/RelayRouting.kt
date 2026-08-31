@@ -21,6 +21,13 @@ internal object RelayRouting {
         url.host == "api.scraperapi.com" -> "scraperapi"
         url.host == "api.unsplash.com" -> "unsplash"
         url.host == "api.ebay.com" -> "ebay"
+        // The two affiliate gateways. Both were registered on the relay and
+        // missing here, which does not fail loudly: an unmapped host is passed
+        // through untouched, so the request would have gone straight to the
+        // gateway with no app key and no signature and come back as an error
+        // envelope — after the relay was deployed and looked correct.
+        url.host == "api-sg.aliexpress.com" -> "aliexpress"
+        url.host == "eco.taobao.com" -> "taobaounion"
         url.host.endsWith(".p.rapidapi.com") -> "rapidapi"
         url.host == "www.googleapis.com" && url.encodedPath.startsWith("/customsearch") -> "googlesearch"
         else -> null
